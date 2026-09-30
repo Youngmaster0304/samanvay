@@ -1,0 +1,94 @@
+# Render blueprint: Vercel hosts the web app; these four services are the
+# backend. Everything is on the Free tier on purpose (submission-day demo):
+#   - Free web services spin down after ~15 min idle (the keepalive workflow
+#     pings them) and Free Postgres expires 30 days after creation.
+#   - The Celery worker is omitted on purpose: no API route dispatches tasks.
+#   - TiTiler and pg_tileserv are omitted: the current UI reads the Esri
+#     basemap and static GeoJSON, it never calls them.
+services:
+  - type: web
+    name: samanvay-api
+    runtime: docker
+    region: singapore
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      # Set to the Vercel production URL after the frontend is deployed
+      # (single-origin CORS; the API refuses any other origin).
+      - key: WEB_ORIGIN
+        value: http://localhost:3000
+      - key: POLICY_PATH
+        value: /app/policies/naksha_default.yaml
+      - key: STORAGE_SRID
+        value: "32643"
+      - key: APP_ENV
+        value: prod
+      - key: CHECK_TIMEOUT_SECONDS
+        value: "5"
+      - key: MINIO_BUCKET
+        value: samanvay
+      - key: MINIO_SECURE
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: samanvay-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: samanvay-redis
+          type: keyvalue
+          property: connectionString
+      - key: MINIO_ENDPOINT
+        fromService:
+          name: samanvay-minio
+          type: web
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
+      - key: MINIO_ACCESS_KEY
+        fromService:
+          name: samanvay-minio
+          type: web
+          envVarKey: MINIO_ROOT_USER
+      - key: MINIO_SECRET_KEY
+        fromService:
+          name: samanvay-minio
+          type: web
+          envVarKey: MINIO_ROOT_PASSWORD
+
+  # Ephemeral object store (Free services cannot attach disks): the entrypoint
+  # recreates the bucket on every boot; uploaded bytes survive only until the
+  # instance restarts. Source metadata lives in Postgres, not here.
+  - type: web
+    name: samanvay-minio
+    runtime: docker
+    region: singapore
+    plan: free
+    dockerfilePath: ./deploy/minio/Dockerfile
+    dockerContext: .
+    healthCheckPath: /minio/health/live
+    autoDeployTrigger: commit
+    envVars:
+      - key: MINIO_ROOT_USER
+        value: samanvay
+      - key: MINIO_ROOT_PASSWORD
+        generateValue: true
+      - key: MINIO_BUCKET
+        value: samanvay
+
+  - type: keyvalue
+    name: samanvay-redis
+    region: singapore
+    plan: free
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: everywhere
+
+databases:
+  - name: samanvay-db
+    region: singapore
+    plan: free
+    postgresMajorVersion: "17"
+    databaseName: samanvay
+    user: samanvay

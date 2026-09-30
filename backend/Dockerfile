@@ -25,4 +25,7 @@ RUN pip install --upgrade pip \
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form so managed platforms (Render) can inject $PORT; Compose leaves it
+# unset and gets the historical :8000. Migrations run at boot: alembic is
+# idempotent and it keeps the schema current after a platform redeploy.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

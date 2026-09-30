@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,8 +57,24 @@ class Settings(BaseSettings):
     max_archive_bytes: int = Field(
         default=2 * 1024 * 1024 * 1024,
         alias="MAX_ARCHIVE_BYTES",
-        description="Refuse a zip whose unpacked size exceeds this many bytes.",
+        description="Refuse an archive whose unpacked size exceeds this many bytes (413).",
     )
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _normalize_database_scheme(cls, value: object) -> object:
+        """Accept managed platforms' `postgres://` URLs and pin psycopg (v3).
+
+        Render (and Heroku-style platforms) hand out `postgres://`; SQLAlchemy
+        maps a bare `postgresql://` to psycopg2, which this project does not
+        install, so both schemes are rewritten to `postgresql+psycopg://`.
+        """
+        if isinstance(value, str):
+            if value.startswith("postgres://"):
+                return "postgresql+psycopg://" + value[len("postgres://") :]
+            if value.startswith("postgresql://"):
+                return "postgresql+psycopg://" + value[len("postgresql://") :]
+        return value
 
 
 @lru_cache(maxsize=1)

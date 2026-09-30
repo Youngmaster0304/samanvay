@@ -37,7 +37,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: uv pip install --system ".[dev]"
+        # setup-uv activates a project .venv (VIRTUAL_ENV is set), so install
+        # into it. --system would hit Ubuntu's externally-managed /usr Python.
+        run: uv pip install ".[dev]"
       - name: Ruff lint
         run: ruff check .
       - name: Ruff format

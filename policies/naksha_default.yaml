@@ -1,0 +1,111 @@
+# NAKSHA default reconciliation policy for Samanvay.
+#
+# Values tagged [N] follow the three-tier protocol described in docs/research.md
+# (Frontiers in Sustainable Cities, NAKSHA scaling paper, Sep 2026). Confirm the
+# exact numbers against the NAKSHA SOP before presenting them as official rules.
+# Values tagged [P] are starting priors that MUST be calibrated on our own AOI
+# before any number is quoted. Nothing here is hard-coded in application logic.
+
+policy:
+  name: naksha_default
+  version: "0.1.0"
+  description: >-
+    Three-tier reconciliation of drone-derived boundaries against legacy cadastral
+    and revenue records, with dispute flagging and field verification.
+
+# --- Tier 1 / Tier 2 decision thresholds -------------------------------------
+area_tolerance_pct: 5.0            # [N] |A_drone - A_recorded| / A_recorded
+position_tol_sigma: 3.0            # [P] multiples of combined source sigma
+require_possession_evidence: true  # [N] boundary supported by imagery edge or a GNSS point
+autoresolve_min_confidence: 70     # [P] below this a Tier-1 case is still auto-resolved? no: sent to review
+
+# --- Source hierarchy (highest first) ----------------------------------------
+# Used only when no Tier-1 rule applies. The recommendation is the higher-ranked
+# source; review is still required if the lower-ranked source has independent
+# corroboration.
+source_hierarchy:
+  - gnss_gt
+  - drone_ori_derived
+  - municipal
+  - revenue_legacy
+
+# --- Assumed 1-sigma positional accuracy per source kind, in metres [P] -------
+# Replace with values measured on our own AOI before quoting anything.
+source_sigma_m:
+  gnss_gt: 0.03
+  drone_ori_derived: 0.15
+  footprint_ai: 1.0
+  municipal: 3.0
+  revenue_legacy: 15.0
+  utility: 5.0
+
+# --- Sheet georeferencing (control points) ----------------------------------
+# Fit ladder: affine -> second-order polynomial -> thin-plate spline, chosen by
+# leave-one-out RMSE so the flexible model cannot win by overfitting. Thresholds
+# are [P]: calibrate on our own control points before quoting them.
+georef:
+  min_control_points: 4          # [P] refuse a fit below this many control points
+  blunder_sigma: 3.5             # [P] flag a control point when residual > k x robust sigma
+  blunder_floor_m: 0.5           # [P] absolute floor: never call a residual below this a blunder
+
+# --- Matching ----------------------------------------------------------------
+matching:
+  search_radius_m: 15.0            # [P] blocking radius, scaled by source sigma
+  accept_threshold: 0.60           # [P] minimum score to accept a 1-to-1 assignment
+  split_merge_cover_pct: 85.0      # [P] parts must cover this share of the whole
+  max_pairs: 5000                  # refuse rather than grind when two sources overlap too much
+
+# --- Topology repair bounds --------------------------------------------------
+topology:
+  overlap_tol_m2: 0.05             # [P]
+  overlap_tol_pct: 0.1             # [P] of parcel area
+  sliver_tol_m2: 0.5               # [P] gaps below this are slivers, unless a mapped road
+  snap_tol_m: 0.10                 # [P] a vertex never moves further than this
+  repair_max_area_change_pct: 1.0  # [P] refuse repairs beyond this bound
+  dangle_tol_m: 1.0                # [P] utility lines
+
+# --- Confidence scoring ------------------------------------------------------
+confidence:
+  weights:
+    pos: 0.30
+    src: 0.20
+    corr: 0.15
+    topo: 0.15
+    attr: 0.10
+    ext: 0.10
+  caps:
+    unresolved_topology: 40
+    open_conflict: 60
+    single_source: 75
+  grade_bands:
+    A: 85
+    B: 70
+    C: 55
+    D: 40
+    # below D is E
+
+# --- Field queue priority ----------------------------------------------------
+field_queue:
+  weights:
+    low_confidence: 0.45
+    conflict_severity: 0.20
+    neighbour_dispute_density: 0.15
+    change_flag: 0.10
+    gt_gap: 0.10
+  gt_gap_radius_m: 30.0            # [P] no GNSS point within this radius counts as a gap
+  cluster_radius_m: 150.0          # [P] DBSCAN radius for routing
+
+# --- Conflict detection ------------------------------------------------------
+# Severity of a detected geometric disagreement between two loaded sources.
+# Every number is a starting heuristic [P] and can be calibrated without a code change.
+conflicts:
+  overlap_high_m2: 100.0       # [P] intersection area at or above this is high severity
+  overlap_medium_m2: 10.0      # [P] at or above this is medium, below it low
+  crossing_high_m: 50.0        # [P] line length outside the other feature for high
+  crossing_medium_m: 5.0       # [P] at or above this is medium, below it low
+  max_pairs: 5000              # refuse rather than grind when two sources overlap too much
+
+# --- Geometry QC -------------------------------------------------------------
+# Flags are measurements of the stored geometry; only the area cut-off is a threshold.
+qc:
+  min_polygon_area_m2: 1.0     # [P] polygons below this area are flagged as slivers

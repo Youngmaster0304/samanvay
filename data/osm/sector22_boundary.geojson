@@ -1,0 +1,58 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Sector 22, Ward 3, Chandigarh, India",
+    "osm_type": "relation",
+    "osm_id": 7894503,
+    "category": "boundary",
+    "source": "OpenStreetMap via Nominatim"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       76.7629635,
+       30.7330002
+      ],
+      [
+       76.7650482,
+       30.7303835
+      ],
+      [
+       76.7678096,
+       30.7269855
+      ],
+      [
+       76.7683301,
+       30.7263491
+      ],
+      [
+       76.7797155,
+       30.7334212
+      ],
+      [
+       76.7742476,
+       30.7397398
+      ],
+      [
+       76.7739469,
+       30.7397033
+      ],
+      [
+       76.7734963,
+       30.7395488
+      ],
+      [
+       76.7629635,
+       30.7330002
+      ]
+     ]
+    ]
+   }
+  }
+ ]
+}

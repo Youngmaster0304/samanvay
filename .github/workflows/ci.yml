@@ -1,0 +1,80 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: backend lint, typecheck, tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    # Stage 1 tests write a registry row, so the suite runs against PostGIS rather
+    # than skipping the database-backed cases.
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: samanvay
+          POSTGRES_USER: samanvay
+          POSTGRES_PASSWORD: samanvay_local_dev_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U samanvay -d samanvay"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      POLICY_PATH: ${{ github.workspace }}/policies/naksha_default.yaml
+      DATABASE_URL: postgresql+psycopg://samanvay:samanvay_local_dev_only@localhost:5432/samanvay
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: uv pip install --system ".[dev]"
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format
+        run: ruff format --check .
+      - name: Mypy
+        run: mypy app
+      - name: Migrate
+        run: alembic upgrade head
+      - name: Pytest
+        run: pytest
+
+  web:
+    name: web lint, typecheck, tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+
+  compose:
+    name: compose config validates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet

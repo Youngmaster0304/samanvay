@@ -1,0 +1,322 @@
+@import "tailwindcss";
+
+/*
+ * Samanvay design tokens. Values are verbatim from docs/design.md section 3.1.
+ * Every contrast ratio quoted there was computed with the WCAG formula on these
+ * exact hex values, so changing one means re-checking the table before shipping.
+ *
+ * No blue and no purple anywhere: not for links, focus rings, selection, charts
+ * or map layers.
+ */
+:root {
+  /* Neutrals: warm paper and ink */
+  --paper-50: #fbf8f1; /* app background */
+  --paper-100: #f4eee1; /* recessed regions, table stripes */
+  --paper-200: #e8dfcc; /* decorative dividers only */
+  --surface: #fffdf7; /* inputs, popovers, dialogs (warm, not pure white) */
+  --stone-500: #857a67; /* control borders (UI boundary, not text) */
+  --stone-600: #6b6252; /* secondary text */
+  --ink-900: #1a1712; /* primary text */
+  --ink-800: #26221a; /* dark surfaces */
+
+  /* Brand: Marigold */
+  --marigold-400: #ff8a3d; /* primary on dark */
+  --marigold-500: #f26a1b; /* primary fill on light */
+  --marigold-600: #b8480a; /* pressed / small text on light (4.99:1) */
+  --marigold-700: #933b08; /* links and text on light (6.90:1) */
+  --marigold-100: #fde6d3; /* tint for selected rows */
+
+  /* Semantic */
+  --paddy-600: #1f7a3e;
+  --paddy-700: #17612f;
+  --paddy-400: #4cc077; /* success, verified */
+  --turmeric-500: #e7a400;
+  --turmeric-700: #8a5f00;
+  --turmeric-400: #ffc533; /* needs review */
+  --chilli-600: #c4183c;
+  --chilli-700: #a01230;
+  --chilli-400: #ff6b85; /* conflict, error */
+
+  /* Data accent (map lines and one chart series only) */
+  --rani-500: #d9327a;
+  --rani-600: #b92468;
+
+  /* Map data palette (docs/design.md 3.3) */
+  --layer-drone: #f26a1b;
+  --layer-cadastral: #1a1712;
+  --layer-revenue: #d9327a;
+  --layer-municipal: #8fbf00;
+  --layer-utility: #e7a400;
+  --layer-canonical: #1f7a3e;
+  --layer-conflict: #c4183c;
+
+  /* Confidence ramp (docs/design.md 3.4). Colour alone is never enough: always
+     pair with the grade letter. */
+  --grade-a: #1f7a3e;
+  --grade-b: #8fae2a;
+  --grade-c: #e7a400;
+  --grade-d: #e8791f;
+  --grade-e: #c4183c;
+
+  /* Roles */
+  --text: var(--ink-900);
+  --text-muted: var(--stone-600);
+  --bg: var(--paper-50);
+  --border: var(--paper-200);
+  --border-ctl: var(--stone-500);
+  --primary: var(--marigold-500);
+  --on-primary: var(--ink-900); /* NOT white: white on marigold-500 is 3.06:1 */
+  --link: var(--marigold-700);
+  --focus: var(--ink-900); /* two-tone ring, see focus-visible below */
+
+  /* Status fills (docs/design.md 3.5). Every one is paired with its word. */
+  --status-auto-resolved: #1f7a3e;
+  --status-accepted: #17612f;
+  --status-needs-review: #e7a400;
+  --status-dispute: #c4183c;
+  --status-rejected: #6b6252;
+
+  /* Colour-blind-safe confidence ramp (docs/design.md 3.4): one hue, light to dark.
+     Selected instead of the A-E ramp when a reader cannot separate red from green. */
+  --grade-cb-1: #fde6d3;
+  --grade-cb-2: #f8c49a;
+  --grade-cb-3: #f26a1b;
+  --grade-cb-4: #b8480a;
+  --grade-cb-5: #933b08;
+
+  /* Spacing scale, radius and elevation (docs/design.md 5.1) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --radius-control: 4px;
+  --radius-panel: 6px;
+  --radius-dialog: 8px;
+  --shadow-popover: 0 4px 16px rgba(26, 23, 18, 0.12);
+
+  /* Motion durations (docs/design.md 6.1) */
+  --motion-hover: 120ms;
+  --motion-inspect: 150ms;
+  --motion-panel: 200ms;
+  --motion-fly-to: 600ms;
+
+  /* Casing drawn under dark map lines so they read on sunlit imagery (3.3) */
+  --casing-light: rgba(255, 253, 247, 0.9);
+  --casing-dark: rgba(26, 23, 18, 0.6);
+
+  /* Font stacks. The --font-* variables are injected by next/font on <html>. */
+  --font-stack-serif: var(--font-source-serif), Georgia, "Times New Roman", serif;
+  --font-stack-sans: var(--font-plex-sans), var(--font-plex-devanagari), system-ui, sans-serif;
+  --font-stack-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+}
+
+:root[data-theme="night"] {
+  /* "Night survey" */
+  --bg: var(--ink-900);
+  --surface: var(--ink-800);
+  --text: #f3ede0;
+  --text-muted: #b5aa94;
+  --border: #3a3428;
+  --border-ctl: #8f846f;
+  --primary: var(--marigold-400);
+  --on-primary: var(--ink-900);
+  --link: var(--marigold-400);
+  --focus: #f3ede0;
+}
+
+@theme inline {
+  --color-paper-50: var(--paper-50);
+  --color-paper-100: var(--paper-100);
+  --color-paper-200: var(--paper-200);
+  --color-surface: var(--surface);
+  --color-stone-500: var(--stone-500);
+  --color-stone-600: var(--stone-600);
+  --color-ink-900: var(--ink-900);
+  --color-ink-800: var(--ink-800);
+  --color-marigold-400: var(--marigold-400);
+  --color-marigold-500: var(--marigold-500);
+  --color-marigold-600: var(--marigold-600);
+  --color-marigold-700: var(--marigold-700);
+  --color-marigold-100: var(--marigold-100);
+  --color-paddy-600: var(--paddy-600);
+  --color-turmeric-500: var(--turmeric-500);
+  --color-chilli-600: var(--chilli-600);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-bg: var(--bg);
+  --color-border: var(--border);
+  --color-border-ctl: var(--border-ctl);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-link: var(--link);
+
+  --font-sans: var(--font-stack-sans);
+  --font-serif: var(--font-stack-serif);
+  --font-mono: var(--font-stack-mono);
+}
+
+html {
+  color-scheme: light;
+}
+
+:root[data-theme="night"] {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-stack-sans);
+  font-size: 15px;
+  line-height: 22px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Two-tone focus ring: 2px surface gap then 2px focus colour, so it stays
+   visible on paper, on dark panels and over imagery. Never remove it. */
+:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--focus);
+}
+
+a {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Typography roles (docs/design.md section 4) */
+.h1 {
+  font-family: var(--font-stack-serif);
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.h2 {
+  font-family: var(--font-stack-serif);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.lead {
+  font-size: 17px;
+  line-height: 26px;
+  max-width: 62ch;
+}
+
+.small {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.label {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.data {
+  font-family: var(--font-stack-mono);
+  font-size: 13px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Buttons: primary only for now. Secondary, quiet and destructive land with the
+   Stage 9 component inventory, so they are deliberately not defined yet. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 4px;
+  font-family: var(--font-stack-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.btn--primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  border: 1px solid var(--primary);
+}
+
+.btn--primary:hover {
+  background: var(--marigold-600);
+  border-color: var(--marigold-600);
+  color: #ffffff; /* 5.29:1, the pressed-state pair from design.md 3.2 */
+}
+
+.btn--primary:active {
+  background: var(--marigold-600);
+  border-color: var(--marigold-600);
+  color: #ffffff;
+}
+
+.btn--secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-ctl);
+}
+
+.btn--secondary:hover {
+  background: var(--paper-100);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Panels: only where content is a real group. No left-edge colour stripes. */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.divider {
+  border-top: 1px solid var(--border);
+}
+
+/* Status stamps: always text, never colour alone. */
+.stamp {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid var(--border-ctl);
+  border-radius: 2px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

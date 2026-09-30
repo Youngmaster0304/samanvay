@@ -1,0 +1,186 @@
+name: samanvay
+
+x-app-env: &app-env
+  APP_ENV: ${APP_ENV:-dev}
+  APP_VERSION: ${APP_VERSION:-0.1.0}
+  POLICY_PATH: /app/policies/naksha_default.yaml
+  WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+  STORAGE_SRID: ${STORAGE_SRID:-32643}
+
+services:
+  postgis:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-samanvay}
+      POSTGRES_USER: ${POSTGRES_USER:-samanvay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-samanvay_local_dev_only}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    restart: unless-stopped
+    # MinIO's own images are no longer published on Docker Hub or quay.io;
+    # bitnamilegacy is the frozen public copy and it ships `mc` as well.
+    image: bitnamilegacy/minio:latest
+    command: server /bitnami/minio/data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-samanvay}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-samanvay_local_dev_only}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/bitnami/minio/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: bitnamilegacy/minio:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing local/"$${MINIO_BUCKET}"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-samanvay}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-samanvay_local_dev_only}
+      MINIO_BUCKET: ${MINIO_BUCKET:-samanvay}
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://samanvay:samanvay_local_dev_only@postgis:5432/samanvay}
+      REDIS_URL: ${API_REDIS_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: ${API_MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-samanvay}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-samanvay_local_dev_only}
+      MINIO_BUCKET: ${MINIO_BUCKET:-samanvay}
+      MINIO_SECURE: "false"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgis:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz', timeout=3).status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://samanvay:samanvay_local_dev_only@postgis:5432/samanvay}
+      REDIS_URL: ${API_REDIS_URL:-redis://redis:6379/0}
+      MINIO_ENDPOINT: ${API_MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-samanvay}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-samanvay_local_dev_only}
+      MINIO_BUCKET: ${MINIO_BUCKET:-samanvay}
+      MINIO_SECURE: "false"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  titiler:
+    image: ghcr.io/developmentseed/titiler:latest
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      AWS_S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-samanvay}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-samanvay_local_dev_only}
+      AWS_VIRTUAL_HOSTING: "FALSE"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:80/healthz >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  tileserver:
+    image: pramsey/pg_tileserv:latest
+    # PostGIS restarts once during first-run init, so this retries instead of
+    # exiting on the initial connection refused.
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://samanvay:samanvay_local_dev_only@postgis:5432/samanvay
+      PG_TILESERV_PORT: 7800
+    ports:
+      - "7800:7800"
+    depends_on:
+      postgis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  web:
+    build:
+      context: ./web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Next's standalone server binds to $HOSTNAME; Docker sets that to the
+      # container id, which makes the in-container healthcheck on localhost fail.
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
+      NEXT_PUBLIC_TITILER_BASE: ${NEXT_PUBLIC_TITILER_BASE:-http://localhost:8081}
+      NEXT_PUBLIC_TILESERVER_BASE: ${NEXT_PUBLIC_TILESERVER_BASE:-http://localhost:7800}
+    depends_on:
+      api:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000',r=>process.exit(r.statusCode?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  pg-data:
+  minio-data:

@@ -1,0 +1,32 @@
+{
+  "retrieved": "2026-09-30",
+  "provider": "OpenStreetMap contributors",
+  "licence": "ODbL-1.0",
+  "sources": [
+    {
+      "file": "sector22_boundary.geojson",
+      "endpoint": "nominatim.openstreetmap.org/search",
+      "query": "Sector 22, Chandigarh",
+      "osm": "relation/7894503",
+      "kind": "municipal"
+    },
+    {
+      "file": "sector22_roads.geojson",
+      "endpoint": "overpass (maps.mail.ru mirror)",
+      "query": "way[highway](30.7280,76.7700,30.7400,76.7900)",
+      "kind": "municipal"
+    }
+  ],
+  "files": [
+    {
+      "file": "sector22_boundary.geojson",
+      "sha256": "122a8ca1f48ac20927b94899dec5387f5c0c57069ed7e59972c91c0f5584bad3",
+      "bytes": 909
+    },
+    {
+      "file": "sector22_roads.geojson",
+      "sha256": "1a95ee84e659bb8f0dc49dfe9c3501a97a082258fe75143c8694a0dfd3cbf396",
+      "bytes": 150260
+    }
+  ]
+}

@@ -2,7 +2,13 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { describeSource, fetchSourceHealth, formatDate, type Source } from "@/lib/sources";
+import {
+  describeSource,
+  fetchSourceHealth,
+  formatDate,
+  previewPngUrl,
+  type Source,
+} from "@/lib/sources";
 
 /**
  * Plain-English dataset card: what the file is (from the registry fields the
@@ -96,6 +102,25 @@ export function DatasetCard({ source }: { source: Source }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {source.raster && (
+        <div>
+          <p className="small" style={{ margin: "0 0 4px", color: "var(--text-muted)" }}>
+            Raster preview served by <span className="data">GET /sources/…/preview.png</span>:
+          </p>
+          {/* eslint-disable-next-line @next/next/no-img-element -- same-origin-ish API asset, no Next image optimisation for it */}
+          <img
+            src={previewPngUrl(source.source_id)}
+            alt={`Preview of ${source.name}`}
+            style={{
+              display: "block",
+              width: "100%",
+              maxWidth: "480px",
+              border: "1px solid var(--border)",
+            }}
+          />
+        </div>
       )}
 
       <p className="small" style={{ margin: 0, color: "var(--text-muted)" }}>

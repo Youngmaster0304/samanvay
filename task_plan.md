@@ -142,3 +142,15 @@ docs series (`docs/stage-N.md`), with the mapping to the master prompt noted.
 - [ ] commit + push (deploy Render + Vercel), live-verify preview endpoints
 - [ ] seed production: `SAMANVAY_API=https://samanvay-api-wjkk.onrender.com uv run python scripts/demo_drone_flight.py`
 - [ ] live verify: features.geojson 200, preview.png 200, registry + raster rows on map
+
+### Deploy + live verification - DONE (2026-10-01)
+- [x] commit `37db6f5` pushed -> Render redeployed (new `/sources/{id}/preview` route answers
+      `source_not_found` for unknown ids = new build live), Vercel /sources returns 200
+- [x] seeded prod: ortho `141a5edf-bf6a-49fe-9406-5bfbc26eb4b4` (5,384,047 B, raster=True,
+      synthetic=True, coverage in file coords EPSG:32643), footprints
+      `2c66a7d1-2737-4053-b265-b8cee450a0cb` (60 features, QC 0 flags), 8 sources total
+- [x] `GET /preview` -> bounds [76.76296, 30.72612, 76.77972, 30.73997] (WGS 84), 1581x1510
+- [x] `GET /preview.png` -> 1,950,804 B, PNG magic 89 50 4e 47
+- [x] `GET /features.geojson` -> 60 features, first coord 76.774, 30.731 (WGS 84)
+- [x] `/readyz` all green (db/redis/object_store/policy); web /sources 200
+- [x] dataset card now embeds the preview `<img>` for raster sources (web gates green after)

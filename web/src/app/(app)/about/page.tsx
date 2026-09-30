@@ -43,8 +43,10 @@ export default function AboutPage() {
               <span className="data">data/osm/manifest.json</span>.
             </li>
             <li>
-              Drone imagery (ORI), cadastral sheets, revenue records and utility maps have not been
-              ingested in this deployment; those screens stay empty rather than showing stand-ins.
+              A <strong>SYNTHETIC</strong> demo drone orthophoto is registered to exercise the
+              raster path and is drawn on the map from its preview; real ORI, cadastral sheets,
+              revenue records and utility maps have not been ingested, and those screens stay
+              empty rather than showing stand-ins.
             </li>
             <li>
               Any dataset created purely for testing is flagged <strong>SYNTHETIC</strong> in the

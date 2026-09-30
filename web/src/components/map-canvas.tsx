@@ -34,7 +34,42 @@ export interface DynamicLayer {
   bbox: [number, number, number, number] | null;
 }
 
+/** A raster source shown from `GET /sources/{id}/preview.png` over its WGS 84 bounds. */
+export interface ImageLayer {
+  id: string;
+  label: string;
+  url: string;
+  bounds: [number, number, number, number];
+}
+
 const DYN_SUFFIXES = ["line-casing", "line", "fill", "circle"] as const;
+
+function addImageLayer(
+  map: MapLibreMap,
+  layer: ImageLayer,
+  visible: Record<string, boolean>,
+): void {
+  const sourceId = `imgsrc-${layer.id}`;
+  if (map.getSource(sourceId)) return;
+  const [west, south, east, north] = layer.bounds;
+  map.addSource(sourceId, {
+    type: "image",
+    url: layer.url,
+    coordinates: [
+      [west, north],
+      [east, north],
+      [east, south],
+      [west, south],
+    ],
+  });
+  map.addLayer({
+    id: `img-${layer.id}`,
+    type: "raster",
+    source: sourceId,
+    layout: { visibility: (visible[layer.id] ?? true) ? "visible" : "none" },
+    paint: { "raster-opacity": 0.95 },
+  });
+}
 
 function addDynamicLayer(
   map: MapLibreMap,
@@ -92,23 +127,27 @@ export function MapCanvas({
   visible,
   fitKey = 0,
   dynamicLayers = [],
+  imageLayers = [],
   fitBounds,
 }: {
   visible: Record<string, boolean>;
   fitKey?: number;
   dynamicLayers?: DynamicLayer[];
+  imageLayers?: ImageLayer[];
   fitBounds?: [number, number, number, number] | null;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const visibleRef = useRef(visible);
   const dynamicRef = useRef<DynamicLayer[]>(dynamicLayers);
+  const imageRef = useRef<ImageLayer[]>(imageLayers);
   const boundsRef = useRef<[number, number, number, number]>(SECTOR22_BBOX);
 
   useEffect(() => {
     dynamicRef.current = dynamicLayers;
+    imageRef.current = imageLayers;
     boundsRef.current = fitBounds ?? SECTOR22_BBOX;
-  }, [dynamicLayers, fitBounds]);
+  }, [dynamicLayers, imageLayers, fitBounds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -206,6 +245,9 @@ export function MapCanvas({
       for (const layer of dynamicRef.current) {
         addDynamicLayer(created, layer, visibleRef.current);
       }
+      for (const layer of imageRef.current) {
+        addImageLayer(created, layer, visibleRef.current);
+      }
       map = created;
       mapRef.current = created;
     })();
@@ -253,6 +295,22 @@ export function MapCanvas({
       }
     }
   }, [dynamicLayers, visible]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || imageLayers.length === 0) return;
+    for (const layer of imageLayers) {
+      addImageLayer(map, layer, visible);
+      const id = `img-${layer.id}`;
+      if (map.getLayer(id)) {
+        map.setLayoutProperty(
+          id,
+          "visibility",
+          (visible[layer.id] ?? true) ? "visible" : "none",
+        );
+      }
+    }
+  }, [imageLayers, visible]);
 
   useEffect(() => {
     const map = mapRef.current;

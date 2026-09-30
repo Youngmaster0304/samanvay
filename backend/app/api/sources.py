@@ -32,6 +32,7 @@ from app.core.config import get_settings
 from app.db.models import SourceFeature, SourceRegistry
 from app.db.session import get_session
 from app.ingest.errors import IngestError
+from app.ingest.preview import PreviewError, preview_info, preview_png
 from app.ingest.service import IngestResult, ingest_upload, summarize
 from app.ingest.store import ObjectStore, get_store
 
@@ -230,6 +231,90 @@ def source_features_geojson(
     if total > len(features):
         payload["truncated"] = True
     return Response(content=json.dumps(payload), media_type="application/geo+json")
+
+
+def _require_row(session: Session, source_id: UUID) -> SourceRegistry:
+    row = session.get(SourceRegistry, source_id)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "source_not_found", "message": f"no source {source_id}"},
+        )
+    return row
+
+
+def _stored_bytes(row: SourceRegistry, store: ObjectStore) -> bytes:
+    try:
+        return store.get(row.object_key)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "preview_bytes_missing",
+                "message": "the stored bytes are gone (object storage was reset); "
+                "re-upload the file",
+            },
+        ) from exc
+
+
+@router.get(
+    "/{source_id}/preview",
+    summary="WGS 84 placement of a raster preview",
+)
+def source_preview(
+    source_id: UUID,
+    session: SessionDep,
+    store: StoreDep,
+) -> dict[str, Any]:
+    row = _require_row(session, source_id)
+    if row.raster is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "no_preview", "message": "only rasters have a preview"},
+        )
+    try:
+        info = preview_info(_stored_bytes(row, store))
+    except PreviewError as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    return {
+        "source_id": str(row.source_id),
+        "name": row.name,
+        "bounds": info["bounds"],
+        "width": info["width"],
+        "height": info["height"],
+        "png": f"/sources/{row.source_id}/preview.png",
+    }
+
+
+@router.get(
+    "/{source_id}/preview.png",
+    summary="Downsampled RGB PNG of a raster source",
+    response_class=Response,
+)
+def source_preview_png(
+    source_id: UUID,
+    session: SessionDep,
+    store: StoreDep,
+) -> Response:
+    row = _require_row(session, source_id)
+    if row.raster is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "no_preview", "message": "only rasters have a preview"},
+        )
+    try:
+        png = preview_png(_stored_bytes(row, store))
+    except PreviewError as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": exc.code, "message": exc.message}
+        ) from exc
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/{source_id}", response_model=SourceOut, summary="Read one source")

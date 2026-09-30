@@ -112,6 +112,33 @@ export async function fetchSourceFeatures(
   return (await response.json()) as SourceFeatures;
 }
 
+/** `GET /sources/{id}/preview` — where a raster sits on the map (WGS 84). */
+export interface PreviewInfo {
+  source_id: string;
+  name: string;
+  bounds: [number, number, number, number];
+  width: number;
+  height: number;
+  png: string;
+}
+
+export async function fetchSourcePreview(
+  id: string,
+  base: string = API_BASE,
+): Promise<PreviewInfo> {
+  const response = await fetch(`${base.replace(/\/$/, "")}/sources/${id}/preview`, {
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`GET /sources/{id}/preview failed with ${response.status}`);
+  }
+  return (await response.json()) as PreviewInfo;
+}
+
+export function previewPngUrl(id: string, base: string = API_BASE): string {
+  return `${base.replace(/\/$/, "")}/sources/${id}/preview.png`;
+}
+
 export interface UploadSourceInput {
   file: File;
   name: string;

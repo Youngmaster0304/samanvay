@@ -9,9 +9,17 @@ import {
   MapCanvas,
   SECTOR22_BBOX,
   type DynamicLayer,
+  type ImageLayer,
   type LayerVisibility,
 } from "@/components/map-canvas";
-import { fetchSourceFeatures, fetchSources, kindHex, kindLabel } from "@/lib/sources";
+import {
+  fetchSourceFeatures,
+  fetchSourcePreview,
+  fetchSources,
+  kindHex,
+  kindLabel,
+  previewPngUrl,
+} from "@/lib/sources";
 
 type LayerGroup = "Basemap" | "Overlays" | "Registry";
 
@@ -209,15 +217,60 @@ export default function MapPage() {
     },
   });
 
+  const rasterIds = useMemo(
+    () =>
+      (sources?.items ?? [])
+        .filter((item) => item.raster !== null && item.coverage !== null)
+        .map((item) => item.source_id),
+    [sources],
+  );
+
+  type PreviewLayer = ImageLayer & { meta: string; color: string };
+
+  const { data: imageLayers } = useQuery<PreviewLayer[]>({
+    queryKey: ["map-image-layers", rasterIds.join(",")],
+    enabled: rasterIds.length > 0,
+    queryFn: async () => {
+      const fetched = await Promise.all(
+        rasterIds.map(async (id) => {
+          try {
+            const info = await fetchSourcePreview(id);
+            const kind =
+              sources?.items.find((item) => item.source_id === id)?.kind ?? "drone_ori";
+            return {
+              id,
+              label: info.name,
+              url: previewPngUrl(id),
+              bounds: info.bounds,
+              meta: `${kindLabel(kind)} · raster preview · ${info.width}×${info.height} px`,
+              color: kindHex(kind),
+            } satisfies PreviewLayer;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      return fetched.filter(
+        (layer): layer is PreviewLayer => layer !== null,
+      );
+    },
+  });
+
   const rows = useMemo<LayerRow[]>(() => {
-    const dynamicRows: LayerRow[] = (registryLayers ?? []).map((layer) => ({
+    const registryRows: LayerRow[] = (registryLayers ?? []).map((layer) => ({
       key: layer.id,
       label: layer.label,
       meta: layer.meta,
       group: "Registry" as const,
     }));
-    return [...LAYERS, ...dynamicRows];
-  }, [registryLayers]);
+    const imageRows: LayerRow[] = (imageLayers ?? []).map((layer) => ({
+      key: layer.id,
+      label: layer.label,
+      meta: layer.meta,
+      group: "Registry" as const,
+    }));
+    return [...LAYERS, ...registryRows, ...imageRows];
+  }, [registryLayers, imageLayers]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -232,19 +285,23 @@ export default function MapPage() {
     rows.filter((layer) => visible[layer.key] ?? true).length;
 
   const fitBounds = useMemo(() => {
-    const boxes = (registryLayers ?? [])
-      .map((layer) => layer.bbox)
-      .filter((box): box is [number, number, number, number] => box !== null);
-    if (boxes.length === 0) return null;
+    const boxes: ([number, number, number, number] | null)[] = [
+      ...(registryLayers ?? []).map((layer) => layer.bbox),
+      ...(imageLayers ?? []).map((layer) => layer.bounds),
+    ];
+    const valid = boxes.filter(
+      (box): box is [number, number, number, number] => box !== null,
+    );
+    if (valid.length === 0) return null;
     let [minx, miny, maxx, maxy] = SECTOR22_BBOX;
-    for (const [a, b, c, d] of boxes) {
+    for (const [a, b, c, d] of valid) {
       if (a < minx) minx = a;
       if (b < miny) miny = b;
       if (c > maxx) maxx = c;
       if (d > maxy) maxy = d;
     }
     return [minx, miny, maxx, maxy] as [number, number, number, number];
-  }, [registryLayers]);
+  }, [registryLayers, imageLayers]);
 
   function toggle(key: string) {
     setVisible((current) => ({ ...current, [key]: !(current[key] ?? true) }));
@@ -396,7 +453,10 @@ export default function MapPage() {
                         >
                           <LayerPreview
                             layer={layer.key}
-                            color={(registryLayers ?? []).find((l) => l.id === layer.key)?.color}
+                            color={
+                              (registryLayers ?? []).find((l) => l.id === layer.key)?.color ??
+                              (imageLayers ?? []).find((l) => l.id === layer.key)?.color
+                            }
                           />
                           {layer.label}
                         </span>
@@ -449,12 +509,13 @@ export default function MapPage() {
         </aside>
 
         <section className="panel wb-map" aria-label="Map of Sector 22, Chandigarh">
-          <MapCanvas
-            visible={visible}
-            fitKey={fitKey}
-            dynamicLayers={registryLayers ?? []}
-            fitBounds={fitBounds}
-          />
+        <MapCanvas
+          visible={visible}
+          fitKey={fitKey}
+          dynamicLayers={registryLayers ?? []}
+          imageLayers={imageLayers ?? []}
+          fitBounds={fitBounds}
+        />
           <div className="wb-hud">
             <span className="label" style={{ color: "var(--text)" }}>
               Sector 22 extent

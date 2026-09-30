@@ -110,3 +110,35 @@ docs series (`docs/stage-N.md`), with the mapping to the master prompt noted.
 ### Next
 - [ ] P2: sample drone flight script (synthetic orthophoto + precomputed footprint_ai), seed prod
 - [ ] push + live verify (upload from UI, features.geojson 200, map layer visible)
+
+### P1b — Raster preview (rasters drawn honestly, no fake elevation) — DONE
+- [x] backend: `app/ingest/preview.py` (WGS 84 bounds via `warp_bounds`, RGB PNG through
+      rasterio's MemoryFile PNG driver, 2-98% percentile stretch for non-uint8, average
+      downsample to <=1200 px) + `GET /sources/{id}/preview` (bounds/width/height/png) and
+      `GET /sources/{id}/preview.png` (Cache-Control 1h); 404 `no_preview` for vectors,
+      404 `source_not_found`, 404 `preview_bytes_missing` when object storage was reset,
+      422 `preview_needs_crs`; +3 tests in `test_sources_api.py` (91 total)
+- [x] web: `fetchSourcePreview`/`previewPngUrl`, MapCanvas `imageLayers` (image source
+      TL,TR,BR,BL + raster layer, refs synced in effects, per-layer visibility), map page
+      image rows in the Registry group + fit-bounds union, dataset-card raster health line
+      ("drawn from its preview PNG")
+
+### P2 — Sample drone flight — DONE
+- [x] `backend/scripts/demo_drone_flight.py`: synthetic 1 m/px RGB GeoTIFF (noise terrain,
+      soft park greens, OSM roads widened into asphalt strips, OSM buildings rasterised with
+      per-roof colours + cast shadow; WGS 84 geoms reprojected to EPSG:32643 first) and a
+      60-feature jittered OSM `footprint_ai` subset (seed 2026, original ring kept when the
+      jitter invalidates it); reuse-by-name via `POST /sources`; `--build-only` smoke path;
+      verified locally: 1581x1510 px, preview PNG rendered and visually checked (road grid,
+      roofs, parks all present - first attempt forgot transform_geom and drew nothing; fixed)
+- [x] about page wording: synthetic demo orthophoto IS ingested/drawn; real ORI/cadastral/
+      revenue/utility still honestly "not ingested"
+
+### Gates (both stacks, post-P1b+P2)
+- [x] backend: ruff check / format --check / mypy (54 files) / pytest 91 - green
+- [x] web: lint / typecheck / vitest 22 / next build 8 routes - green
+
+### Remaining
+- [ ] commit + push (deploy Render + Vercel), live-verify preview endpoints
+- [ ] seed production: `SAMANVAY_API=https://samanvay-api-wjkk.onrender.com uv run python scripts/demo_drone_flight.py`
+- [ ] live verify: features.geojson 200, preview.png 200, registry + raster rows on map

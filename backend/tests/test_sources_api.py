@@ -414,3 +414,69 @@ def test_features_endpoint_refuses_an_unknown_source(
 
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "source_not_found"
+
+
+def _geotiff() -> bytes:
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    with rasterio.MemoryFile() as memfile:
+        with memfile.open(
+            driver="GTiff",
+            width=16,
+            height=16,
+            count=3,
+            dtype="uint8",
+            crs="EPSG:32643",
+            transform=from_origin(700_000, 3_350_000, 10, 10),
+        ) as dst:
+            dst.write(np.full((3, 16, 16), 120, dtype="uint8"))
+        return memfile.read()
+
+
+def test_raster_preview_reports_bounds_and_png(api: tuple[TestClient, MemoryStore]) -> None:
+    client, _store = api
+    created = _post(
+        client,
+        payload=_geotiff(),
+        filename="flight.tif",
+        kind="drone_ori",
+        name=_test_name(),
+        extra={"is_synthetic": "true"},
+    )
+    assert created.status_code == 201, created.text
+    source_id = created.json()["source_id"]
+
+    info = client.get(f"/sources/{source_id}/preview")
+    assert info.status_code == 200, info.text
+    body = info.json()
+    west, south, east, north = body["bounds"]
+    assert west < east and south < north
+    assert 70 < west < 80 and 25 < south < 35, "bounds must be plausible WGS 84"
+    assert body["png"] == f"/sources/{source_id}/preview.png"
+    assert body["width"] == 16 and body["height"] == 16
+
+    image = client.get(f"/sources/{source_id}/preview.png")
+    assert image.status_code == 200, image.text
+    assert image.headers["content-type"] == "image/png"
+    assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_preview_is_refused_for_vector_sources(api: tuple[TestClient, MemoryStore]) -> None:
+    client, _store = api
+    created = _post(client, payload=_geojson("norgb"), filename="layer.geojson", name=_test_name())
+    assert created.status_code == 201, created.text
+
+    info = client.get(f"/sources/{created.json()['source_id']}/preview")
+    assert info.status_code == 404
+    assert info.json()["detail"]["code"] == "no_preview"
+
+
+def test_preview_refuses_an_unknown_source(api: tuple[TestClient, MemoryStore]) -> None:
+    client, _store = api
+
+    info = client.get("/sources/00000000-0000-0000-0000-000000000000/preview")
+
+    assert info.status_code == 404
+    assert info.json()["detail"]["code"] == "source_not_found"

@@ -27,9 +27,13 @@ export function DatasetCard({ source }: { source: Source }) {
       healthLines.push(
         `Loaded to storage: ${health.loaded.features} feature(s)${byClass ? ` (${byClass})` : ""} in EPSG:${health.storage_srid}.`,
       );
+    } else if (source.raster) {
+      healthLines.push(
+        "Raster: no vector features — drawn on the map from its preview PNG.",
+      );
     } else {
       healthLines.push(
-        "No features loaded — this source is not drawn on the map (a raster or a table without geometry).",
+        "No features loaded — this source is not drawn on the map (a table without geometry).",
       );
     }
     if (health.qc.flagged_features > 0) {

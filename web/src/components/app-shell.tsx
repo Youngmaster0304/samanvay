@@ -155,9 +155,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div style={{ marginTop: "auto", padding: "12px", display: "grid", gap: "8px" }}>
-          <p className="label" style={{ color: "var(--text-muted)", margin: 0 }}>
-            Prototype · SIH 2026
-          </p>
           <ThemeToggle />
         </div>
       </nav>

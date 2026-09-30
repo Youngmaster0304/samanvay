@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -47,13 +46,6 @@ export default function OverviewPage() {
 
   return (
     <>
-      <div className="hero-brand">
-        <Image src="/logo.png" alt="Samanvay" width={132} height={103} priority style={{ width: 132, height: "auto" }} />
-        <p className="label" style={{ color: "var(--text-muted)", margin: 0 }}>
-          Smart India Hackathon 2026 · Problem statement 26013 · Chandigarh pilot
-        </p>
-      </div>
-
       <h1 className="h1" style={{ margin: "8px 0 16px" }}>
         Harmonization workbench for urban land records
       </h1>
@@ -98,12 +90,6 @@ export default function OverviewPage() {
       </div>
 
       <style>{`
-        .hero-brand {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-          flex-wrap: wrap;
-        }
         .flow-strip {
           display: flex;
           flex-wrap: wrap;

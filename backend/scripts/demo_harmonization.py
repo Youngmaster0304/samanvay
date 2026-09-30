@@ -9,12 +9,13 @@ Registers two clearly synthetic demo layers, then exercises the whole loop:
 """
 
 import json
+import os
 import urllib.request
 import uuid
+from pathlib import Path
 
-API = "http://localhost:8000"
-ROADS = "d56a3fdf-31f8-4a2b-83c7-deac8441c431"
-BOUNDARY = "4276295e-4090-41cb-9a97-c1ab8e382aac"
+API = os.environ.get("SAMANVAY_API", "http://localhost:8000")
+PILOT_DIR = Path(__file__).resolve().parents[2] / "data" / "osm"
 
 
 def call(method: str, path: str, payload: dict | None = None) -> dict:
@@ -65,6 +66,20 @@ def post_source(
     )
     with urllib.request.urlopen(request) as response:
         return json.loads(response.read().decode())["source_id"]
+
+
+def pilot_source(filename: str, name: str) -> str:
+    """Register (or reuse) a real OSM pilot layer from data/osm/, then load it."""
+    payload = json.loads((PILOT_DIR / filename).read_text(encoding="utf-8"))
+    source_id = post_source(
+        payload,
+        filename=filename,
+        kind="municipal",
+        name=name,
+        extra={"vintage": "2026-09-30"},
+    )
+    call("POST", f"/sources/{source_id}/load")
+    return source_id
 
 
 def square(west: float, south: float, east: float, north: float) -> dict:
@@ -189,7 +204,9 @@ def main() -> None:
     print("=" * 72)
     print("3) Conflicts on the pilot pair (roads x municipal boundary)")
     print("=" * 72)
-    detected = call("POST", "/conflicts/detect", {"source_a": ROADS, "source_b": BOUNDARY})
+    roads = pilot_source("sector22_roads.geojson", "OSM Sector 22 roads")
+    boundary = pilot_source("sector22_boundary.geojson", "OSM Sector 22 municipal boundary")
+    detected = call("POST", "/conflicts/detect", {"source_a": roads, "source_b": boundary})
     print(
         json.dumps(
             {k: detected[k] for k in ("pairs_examined", "created", "by_severity", "by_type")},

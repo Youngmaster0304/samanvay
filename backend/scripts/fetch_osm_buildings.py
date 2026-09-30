@@ -10,6 +10,7 @@ Query is overpass `way["building"]` clipped to the same bbox the map uses
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.parse
 import urllib.request
@@ -26,7 +27,7 @@ ENDPOINTS = [
 ]
 OSM_API = f"https://api.openstreetmap.org/api/0.6/map?bbox={WEST},{SOUTH},{EAST},{NORTH}"
 OUT = Path(__file__).resolve().parents[1] / "data" / "osm" / "sector22_buildings.geojson"
-API = "http://localhost:8000"
+API = os.environ.get("SAMANVAY_API", "http://localhost:8000")
 UA = {"User-Agent": "samanvay-sih2026/0.1"}
 
 
@@ -139,11 +140,17 @@ def register() -> str:
 
 
 def main() -> None:
-    payload = fetch()
-    collection, skipped = to_geojson(payload)
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(collection), encoding="utf-8")
-    print(f"saved {len(collection['features'])} closed building rings to {OUT} (skipped {skipped})")
+    if "--refetch" in sys.argv or not OUT.exists():
+        payload = fetch()
+        collection, skipped = to_geojson(payload)
+        OUT.parent.mkdir(parents=True, exist_ok=True)
+        OUT.write_text(json.dumps(collection), encoding="utf-8")
+        print(
+            f"saved {len(collection['features'])} closed building rings to {OUT} "
+            f"(skipped {skipped})"
+        )
+    else:
+        print(f"reusing {OUT} (pass --refetch to pull from OSM again)")
 
     if "--register" in sys.argv:
         # Re-registering the same name is fine for the demo: the registry keys on the

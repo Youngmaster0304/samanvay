@@ -1,11 +1,17 @@
 """Live conflict-detection check against the running API (Stage 6 first slice)."""
 
 import json
+import os
 import urllib.request
 
-API = "http://localhost:8000"
-ROADS = "d56a3fdf-31f8-4a2b-83c7-deac8441c431"
-BOUNDARY = "4276295e-4090-41cb-9a97-c1ab8e382aac"
+API = os.environ.get("SAMANVAY_API", "http://localhost:8000")
+
+
+def find_source(name: str) -> str:
+    for item in call("GET", "/sources")["items"]:
+        if item["name"] == name:
+            return str(item["source_id"])
+    raise SystemExit(f"source not registered: {name}")
 
 
 def call(method: str, path: str, payload: dict | None = None) -> dict:
@@ -24,7 +30,10 @@ def main() -> None:
     summary = call(
         "POST",
         "/conflicts/detect",
-        {"source_a": ROADS, "source_b": BOUNDARY},
+        {
+            "source_a": find_source("OSM Sector 22 roads"),
+            "source_b": find_source("OSM Sector 22 municipal boundary"),
+        },
     )
     print("detect:", json.dumps(summary, indent=2, ensure_ascii=False))
 

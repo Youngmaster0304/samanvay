@@ -53,6 +53,17 @@ def create_app() -> FastAPI:
     app.include_router(georef.router)
     app.include_router(conflicts.router)
     app.include_router(matching.router)
+
+    @app.get("/", include_in_schema=False)
+    def root() -> dict[str, str]:
+        return {
+            "service": "samanvay-api",
+            "version": settings.app_version,
+            "docs": "/docs",
+            "health": "/healthz",
+            "ready": "/readyz",
+        }
+
     return app
 
 

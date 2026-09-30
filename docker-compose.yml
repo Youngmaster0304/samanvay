@@ -148,7 +148,7 @@ services:
     # exiting on the initial connection refused.
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://samanvay:samanvay_local_dev_only@postgis:5432/samanvay
+      DATABASE_URL: postgresql://samanvay:${POSTGRES_PASSWORD:-samanvay_local_dev_only}@postgis:5432/samanvay
       PG_TILESERV_PORT: 7800
     ports:
       - "7800:7800"

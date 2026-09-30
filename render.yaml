@@ -16,9 +16,10 @@ services:
     healthCheckPath: /healthz
     autoDeployTrigger: commit
     envVars:
-      # Single-origin CORS: the API refuses any other origin.
+      # Single-owner CORS: comma-separated allowed origins (both live Vercel
+      # aliases of the web project; anything else is refused).
       - key: WEB_ORIGIN
-        value: https://web-youngmaster0304s-projects.vercel.app
+        value: https://web-youngmaster0304s-projects.vercel.app,https://web-nu-beryl-88.vercel.app
       - key: POLICY_PATH
         value: /app/policies/naksha_default.yaml
       - key: STORAGE_SRID

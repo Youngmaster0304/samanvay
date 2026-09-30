@@ -161,6 +161,10 @@ services:
   web:
     build:
       context: ./web
+      args:
+        # NEXT_PUBLIC_* is inlined at `next build`, so the public API URL must be
+        # passed at build time — setting it only as runtime env would not take effect.
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:8000}
     restart: unless-stopped
     ports:
       - "3000:3000"

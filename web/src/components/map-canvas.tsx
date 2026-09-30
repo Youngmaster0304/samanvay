@@ -7,7 +7,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { Map as MapLibreMap, StyleSpecification } from "maplibre-gl";
 
 /** Bounding box of data/osm/sector22_boundary.geojson (WGS84). */
-const SECTOR22_BBOX: [number, number, number, number] = [
+export const SECTOR22_BBOX: [number, number, number, number] = [
   76.7629635, 30.7263491, 76.7797155, 30.7397398,
 ];
 
@@ -22,7 +22,63 @@ export type LayerVisibility = {
   osm: boolean;
   boundary: boolean;
   roads: boolean;
+  [key: string]: boolean;
 };
+
+/** A registry source drawn from `GET /sources/{id}/features.geojson`. */
+export interface DynamicLayer {
+  id: string;
+  label: string;
+  color: string;
+  data: GeoJSON.FeatureCollection;
+  bbox: [number, number, number, number] | null;
+}
+
+const DYN_SUFFIXES = ["line-casing", "line", "fill", "circle"] as const;
+
+function addDynamicLayer(
+  map: MapLibreMap,
+  layer: DynamicLayer,
+  visible: Record<string, boolean>,
+): void {
+  const sourceId = `dyn-${layer.id}`;
+  if (map.getSource(sourceId)) return;
+  const shown = (visible[layer.id] ?? true) ? "visible" : "none";
+  map.addSource(sourceId, { type: "geojson", data: layer.data });
+  map.addLayer({
+    id: `${sourceId}-line-casing`,
+    type: "line",
+    source: sourceId,
+    layout: { visibility: shown },
+    paint: { "line-color": "#fffdf7", "line-width": 3.5, "line-opacity": 0.9 },
+  });
+  map.addLayer({
+    id: `${sourceId}-line`,
+    type: "line",
+    source: sourceId,
+    layout: { visibility: shown },
+    paint: { "line-color": layer.color, "line-width": 1.8 },
+  });
+  map.addLayer({
+    id: `${sourceId}-fill`,
+    type: "fill",
+    source: sourceId,
+    layout: { visibility: shown },
+    paint: { "fill-color": layer.color, "fill-opacity": 0.2, "fill-outline-color": layer.color },
+  });
+  map.addLayer({
+    id: `${sourceId}-circle`,
+    type: "circle",
+    source: sourceId,
+    layout: { visibility: shown },
+    paint: {
+      "circle-color": layer.color,
+      "circle-radius": 4,
+      "circle-stroke-color": "#fffdf7",
+      "circle-stroke-width": 1,
+    },
+  });
+}
 
 /**
  * MapLibre wrapper (docs/front.md §5 `MapCanvas`). The default basemap is Esri
@@ -35,13 +91,24 @@ export type LayerVisibility = {
 export function MapCanvas({
   visible,
   fitKey = 0,
+  dynamicLayers = [],
+  fitBounds,
 }: {
-  visible: LayerVisibility;
+  visible: Record<string, boolean>;
   fitKey?: number;
+  dynamicLayers?: DynamicLayer[];
+  fitBounds?: [number, number, number, number] | null;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const visibleRef = useRef(visible);
+  const dynamicRef = useRef<DynamicLayer[]>(dynamicLayers);
+  const boundsRef = useRef<[number, number, number, number]>(SECTOR22_BBOX);
+
+  useEffect(() => {
+    dynamicRef.current = dynamicLayers;
+    boundsRef.current = fitBounds ?? SECTOR22_BBOX;
+  }, [dynamicLayers, fitBounds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,7 +202,10 @@ export function MapCanvas({
       created.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
       created.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-right");
       created.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
-      created.fitBounds(SECTOR22_BBOX, { padding: 48 });
+      created.fitBounds(boundsRef.current, { padding: 48 });
+      for (const layer of dynamicRef.current) {
+        addDynamicLayer(created, layer, visibleRef.current);
+      }
       map = created;
       mapRef.current = created;
     })();
@@ -151,7 +221,7 @@ export function MapCanvas({
     visibleRef.current = visible;
     const map = mapRef.current;
     if (!map) return;
-    const pairs: [keyof LayerVisibility, string[]][] = [
+    const pairs: [string, string[]][] = [
       ["satellite", ["satellite"]],
       ["osm", ["osm"]],
       ["boundary", ["boundary", "boundary-casing"]],
@@ -168,8 +238,26 @@ export function MapCanvas({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map || dynamicLayers.length === 0) return;
+    for (const layer of dynamicLayers) {
+      addDynamicLayer(map, layer, visible);
+      for (const suffix of DYN_SUFFIXES) {
+        const id = `dyn-${layer.id}-${suffix}`;
+        if (map.getLayer(id)) {
+          map.setLayoutProperty(
+            id,
+            "visibility",
+            (visible[layer.id] ?? true) ? "visible" : "none",
+          );
+        }
+      }
+    }
+  }, [dynamicLayers, visible]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || fitKey === 0) return;
-    map.fitBounds(SECTOR22_BBOX, { padding: 48, duration: 600 });
+    map.fitBounds(boundsRef.current, { padding: 48, duration: 600 });
   }, [fitKey]);
 
   return (

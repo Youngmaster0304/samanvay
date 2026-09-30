@@ -8,6 +8,7 @@ returns that row with `reused: true` and status 200 instead of a second record.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Annotated, Any
 from uuid import UUID
@@ -28,7 +29,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.models import SourceRegistry
+from app.db.models import SourceFeature, SourceRegistry
 from app.db.session import get_session
 from app.ingest.errors import IngestError
 from app.ingest.service import IngestResult, ingest_upload, summarize
@@ -160,6 +161,75 @@ def list_sources(
     items = session.execute(items_query.limit(limit).offset(offset)).scalars().all()
 
     return SourceListOut(items=[_stored(row) for row in items], total=total)
+
+
+@router.get(
+    "/{source_id}/features.geojson",
+    summary="Loaded features of one source as GeoJSON in WGS 84",
+    response_class=Response,
+)
+def source_features_geojson(
+    source_id: UUID,
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=50_000, description="cap the response size")] = 20_000,
+) -> Response:
+    """What the map draws: the stored features, reprojected to EPSG:4326 on read.
+
+    Sources that were registered but never loaded (rasters, geometry-less tables)
+    answer with an empty collection rather than an error, so a client can probe
+    every registry row the same way.
+    """
+    row = session.get(SourceRegistry, source_id)
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "source_not_found", "message": f"no source {source_id}"},
+        )
+
+    total = int(
+        session.execute(
+            select(func.count())
+            .select_from(SourceFeature)
+            .where(SourceFeature.source_id == source_id)
+        ).scalar_one()
+    )
+    rows = session.execute(
+        select(
+            SourceFeature.source_fid,
+            SourceFeature.feature_class,
+            SourceFeature.extractor_conf,
+            SourceFeature.qc_flags,
+            SourceFeature.raw_props,
+            func.ST_AsGeoJSON(func.ST_Transform(SourceFeature.geom, 4326)),
+        )
+        .where(SourceFeature.source_id == source_id)
+        .order_by(SourceFeature.source_fid)
+        .limit(limit)
+    ).all()
+
+    features = [
+        {
+            "type": "Feature",
+            "id": fid,
+            "geometry": json.loads(geometry),
+            "properties": {
+                "feature_class": feature_class,
+                "extractor_conf": extractor_conf,
+                "qc_flags": flags or [],
+                "props": raw_props or {},
+            },
+        }
+        for fid, feature_class, extractor_conf, flags, raw_props, geometry in rows
+    ]
+    payload: dict[str, Any] = {
+        "type": "FeatureCollection",
+        "features": features,
+        "total": total,
+        "source": {"source_id": str(row.source_id), "name": row.name, "kind": row.kind},
+    }
+    if total > len(features):
+        payload["truncated"] = True
+    return Response(content=json.dumps(payload), media_type="application/geo+json")
 
 
 @router.get("/{source_id}", response_model=SourceOut, summary="Read one source")

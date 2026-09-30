@@ -77,3 +77,36 @@ docs series (`docs/stage-N.md`), with the mapping to the master prompt noted.
 
 - Disk: Docker build cache filled C: once; run `docker builder prune -af` if free < 5 GB.
 - Headless WebGL is flaky; re-shoot map screenshots until > 300 KB.
+
+
+## Free-tier upgrade: user uploads -> plain-English card -> satellite map (2026-10-01)
+
+### P0 — Upload + dataset card — DONE
+- [x] `web/src/lib/sources.ts`: `uploadSource` (multipart POST /sources), `fetchSourceHealth`,
+      `fetchSourceFeatures`, `describeSource` (plain-English lines, no invented numbers),
+      kind/format/CRS labels fixed (footprint_ai/ref, dsm, dtm; drop nonexistent ai_extracted),
+      `KIND_HEX` palette for MapLibre
+- [x] `web/src/components/upload-source.tsx`: collapsible upload panel (file, name, kind,
+      licence, authority, vintage, declared CRS, sigma, synthetic flag)
+- [x] `web/src/components/dataset-card.tsx`: registry lines + health lines (loaded counts,
+      QC flags, last transform)
+- [x] `web/src/app/(app)/sources/page.tsx`: upload panel, post-upload success card,
+      click-a-row expansion to the dataset card
+
+### P1 — Registry layers on the satellite map — DONE
+- [x] backend: `GET /sources/{id}/features.geojson` (ST_AsGeoJSON(ST_Transform(geom, 4326)),
+      props = feature_class/qc_flags/extractor_conf/raw props, limit, empty collection when
+      unloaded, 404 unknown source) + 3 tests in `test_sources_api.py`
+- [x] `web/src/components/map-canvas.tsx`: dynamic GeoJSON sources with fill/line/circle per
+      layer, visibility toggles, union fit-bounds
+- [x] `web/src/app/(app)/map/page.tsx`: registry group in the layers sidebar, skips rasters
+      and the two OSM sources already drawn statically
+- [x] tests: `web/tests/sources.test.ts` (describeSource, labels, hex palette)
+
+### Gates — DONE
+- [x] backend: ruff check / format --check / mypy / pytest (80 tests) green
+- [x] web: lint / typecheck / vitest (22 tests) / next build green
+
+### Next
+- [ ] P2: sample drone flight script (synthetic orthophoto + precomputed footprint_ai), seed prod
+- [ ] push + live verify (upload from UI, features.geojson 200, map layer visible)

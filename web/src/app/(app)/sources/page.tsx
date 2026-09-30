@@ -4,7 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/empty-state";
+import { DatasetCard } from "@/components/dataset-card";
 import { KindTag, SyntheticBadge } from "@/components/badges";
+import { UploadSourcePanel } from "@/components/upload-source";
 import {
   fetchSources,
   formatBytes,
@@ -35,6 +37,8 @@ const TD: React.CSSProperties = {
 export default function SourcesPage() {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [justUploaded, setJustUploaded] = useState<Source | null>(null);
 
   const { data, error, isPending, refetch, isFetching } = useQuery({
     queryKey: ["sources"],
@@ -82,6 +86,51 @@ export default function SourcesPage() {
         columns (residual RMSE, coverage) are not charted yet; loaded-feature counts and QC flags
         per source read from <span className="data">{"GET /sources/{id}/health"}</span>.
       </p>
+
+      <UploadSourcePanel
+        onUploaded={(source) => {
+          setJustUploaded(source);
+          void refetch();
+        }}
+      />
+
+      {justUploaded && (
+        <div
+          className="panel"
+          role="status"
+          style={{
+            padding: "16px 18px",
+            marginBottom: "16px",
+            borderColor: "var(--layer-canonical)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: "10px",
+              alignItems: "start",
+            }}
+          >
+            <p className="label" style={{ margin: "0 0 8px", color: "var(--layer-canonical)" }}>
+              Registered — {justUploaded.name}
+            </p>
+            <button
+              type="button"
+              className="btn btn--secondary"
+              style={{ minHeight: "30px", padding: "0 10px", fontSize: "12px" }}
+              onClick={() => setJustUploaded(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+          <DatasetCard source={justUploaded} />
+          <p className="small" style={{ margin: "10px 0 0" }}>
+            <a href="/map">See it on the satellite map →</a> — vector layers appear under
+            “Registry layers” once the map loads.
+          </p>
+        </div>
+      )}
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center", marginBottom: "14px" }}>
         <label className="small" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -189,7 +238,17 @@ export default function SourcesPage() {
             </thead>
             <tbody>
               {rows.map((source, index) => (
-                <SourceRow key={source.source_id} source={source} striped={index % 2 === 1} />
+                <SourceRow
+                  key={source.source_id}
+                  source={source}
+                  striped={index % 2 === 1}
+                  expanded={expandedId === source.source_id}
+                  onToggle={() =>
+                    setExpandedId((current) =>
+                      current === source.source_id ? null : source.source_id,
+                    )
+                  }
+                />
               ))}
             </tbody>
           </table>
@@ -199,19 +258,48 @@ export default function SourcesPage() {
   );
 }
 
-function SourceRow({ source, striped }: { source: Source; striped: boolean }) {
+function SourceRow({
+  source,
+  striped,
+  expanded,
+  onToggle,
+}: {
+  source: Source;
+  striped: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <tr
-      style={{
-        background: striped ? "var(--paper-100)" : "transparent",
-        borderTop: "1px solid var(--border)",
-      }}
-    >
-      <th scope="row" style={{ ...TD, textAlign: "left", fontWeight: 500 }}>
-        <span style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
-          {source.name}
-          {source.is_synthetic && <SyntheticBadge />}
-        </span>
+    <>
+      <tr
+        style={{
+          background: striped ? "var(--paper-100)" : "transparent",
+          borderTop: "1px solid var(--border)",
+        }}
+      >
+        <th scope="row" style={{ ...TD, textAlign: "left", fontWeight: 500 }}>
+          <span style={{ display: "inline-flex", gap: "8px", alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={expanded}
+              style={{
+                background: "none",
+                border: 0,
+                padding: 0,
+                font: "inherit",
+                fontWeight: 500,
+                color: "var(--text)",
+                cursor: "pointer",
+                textAlign: "left",
+                textDecoration: expanded ? "underline" : "none",
+                textUnderlineOffset: "3px",
+              }}
+            >
+              {source.name}
+            </button>
+            {source.is_synthetic && <SyntheticBadge />}
+          </span>
         {source.notes.length > 0 && (
           <span
             className="small"
@@ -247,6 +335,14 @@ function SourceRow({ source, striped }: { source: Source; striped: boolean }) {
       <td className="data" style={TD} title={source.sha256}>{shortSha(source.sha256)}</td>
       <td className="data" style={{ ...TD, textAlign: "right" }}>{formatBytes(source.size_bytes)}</td>
       <td className="data" style={TD}>{formatDate(source.ingested_at)}</td>
-    </tr>
+      </tr>
+      {expanded && (
+        <tr style={{ background: "var(--paper-100)", borderTop: "1px solid var(--border)" }}>
+          <td colSpan={12} style={{ padding: "14px 8px 16px 0" }}>
+            <DatasetCard source={source} />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

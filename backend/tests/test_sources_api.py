@@ -359,3 +359,58 @@ def test_list_filters_by_kind(api: tuple[TestClient, MemoryStore]) -> None:
     revenue = client.get("/sources", params={"kind": "revenue", "limit": 100})
     assert revenue.status_code == 200
     assert {item["kind"] for item in revenue.json()["items"]} == {"revenue"}
+
+
+def test_serves_loaded_features_as_wgs84_geojson(api: tuple[TestClient, MemoryStore]) -> None:
+    client, _store = api
+    created = _post(
+        client, payload=_geojson("mapview"), filename="layer.geojson", name=_test_name()
+    )
+    assert created.status_code == 201, created.text
+    source_id = created.json()["source_id"]
+
+    response = client.get(f"/sources/{source_id}/features.geojson")
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("application/geo+json")
+    body = response.json()
+    assert body["type"] == "FeatureCollection"
+    assert body["total"] == 1
+    assert "truncated" not in body
+    feature = body["features"][0]
+    assert feature["properties"]["feature_class"] == "parcel"
+    assert feature["properties"]["props"]["name"] == "block mapview"
+    lon, lat = feature["geometry"]["coordinates"][0][0]
+    assert 76.7 < lon < 76.9 and 30.6 < lat < 30.8, "geometry must be reprojected to WGS 84"
+
+
+def test_features_of_a_geometry_less_source_is_an_empty_collection(
+    api: tuple[TestClient, MemoryStore],
+) -> None:
+    client, _store = api
+    created = _post(
+        client,
+        payload=b"khasra,owner,sqm\n12,recorded,505\n",
+        filename="ror.csv",
+        kind="revenue",
+        name=_test_name(),
+    )
+    assert created.status_code == 201, created.text
+
+    response = client.get(f"/sources/{created.json()['source_id']}/features.geojson")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["features"] == []
+    assert body["total"] == 0
+
+
+def test_features_endpoint_refuses_an_unknown_source(
+    api: tuple[TestClient, MemoryStore],
+) -> None:
+    client, _store = api
+
+    response = client.get("/sources/00000000-0000-0000-0000-000000000000/features.geojson")
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "source_not_found"

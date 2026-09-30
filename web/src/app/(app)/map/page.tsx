@@ -2,19 +2,35 @@
 
 import { useMemo, useState } from "react";
 
+import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Eye, EyeOff, Search } from "lucide-react";
 
-import { MapCanvas, type LayerVisibility } from "@/components/map-canvas";
+import {
+  MapCanvas,
+  SECTOR22_BBOX,
+  type DynamicLayer,
+  type LayerVisibility,
+} from "@/components/map-canvas";
+import { fetchSourceFeatures, fetchSources, kindHex, kindLabel } from "@/lib/sources";
 
-type LayerKey = keyof LayerVisibility;
-type LayerGroup = "Basemap" | "Overlays";
+type LayerGroup = "Basemap" | "Overlays" | "Registry";
 
 interface LayerRow {
-  key: LayerKey;
+  key: string;
   label: string;
   meta: string;
   group: LayerGroup;
 }
+
+interface RegistryLayer extends DynamicLayer {
+  meta: string;
+}
+
+/** The two municipal OSM sources are already drawn from static files. */
+const STATIC_OVERLAY_NAMES = new Set([
+  "OSM Sector 22 roads",
+  "OSM Sector 22 municipal boundary",
+]);
 
 const LAYERS: LayerRow[] = [
   {
@@ -43,7 +59,7 @@ const LAYERS: LayerRow[] = [
   },
 ];
 
-const GROUPS: LayerGroup[] = ["Basemap", "Overlays"];
+const GROUPS: LayerGroup[] = ["Basemap", "Overlays", "Registry"];
 
 const FLOW = [
   { step: "01", label: "Upload data", hint: "Register & load", href: "/sources" },
@@ -51,7 +67,43 @@ const FLOW = [
   { step: "03", label: "Result", hint: "Layers & queue", href: "/map" },
 ] as const;
 
-function LayerPreview({ layer }: { layer: LayerKey }) {
+function bboxOfFeatures(
+  features: unknown[],
+): [number, number, number, number] | null {
+  let minx = Infinity;
+  let miny = Infinity;
+  let maxx = -Infinity;
+  let maxy = -Infinity;
+  const walk = (node: unknown): void => {
+    if (!Array.isArray(node)) return;
+    if (typeof node[0] === "number" && typeof node[1] === "number") {
+      const x = node[0];
+      const y = node[1];
+      if (x < minx) minx = x;
+      if (y < miny) miny = y;
+      if (x > maxx) maxx = x;
+      if (y > maxy) maxy = y;
+      return;
+    }
+    for (const child of node) walk(child);
+  };
+  for (const feature of features) {
+    const geometry = (feature as { geometry?: { coordinates?: unknown } }).geometry;
+    if (geometry?.coordinates) walk(geometry.coordinates);
+  }
+  if (!Number.isFinite(minx) || !Number.isFinite(miny)) return null;
+  return [minx, miny, maxx, maxy];
+}
+
+function LayerPreview({ layer, color }: { layer: string; color?: string }) {
+  if (color) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{ width: "20px", height: "3px", background: color, display: "block" }}
+      />
+    );
+  }
   if (layer === "roads") {
     return (
       <span
@@ -109,19 +161,93 @@ export default function MapPage() {
   const [fitKey, setFitKey] = useState(0);
   const [tab, setTab] = useState<"layers" | "map">("map");
 
+  const { data: sources } = useQuery({
+    queryKey: ["sources"],
+    queryFn: () => fetchSources(),
+    retry: 1,
+  });
+
+  const candidateIds = useMemo(
+    () =>
+      (sources?.items ?? [])
+        .filter(
+          (item) =>
+            item.has_geometry && !item.raster && !STATIC_OVERLAY_NAMES.has(item.name),
+        )
+        .map((item) => item.source_id),
+    [sources],
+  );
+
+  const { data: registryLayers } = useQuery<RegistryLayer[]>({
+    queryKey: ["map-registry-layers", candidateIds.join(",")],
+    enabled: candidateIds.length > 0,
+    queryFn: async () => {
+      const fetched = await Promise.all(
+        candidateIds.map(async (id) => {
+          try {
+            const features = await fetchSourceFeatures(id);
+            if (features.features.length === 0) return null;
+            const kind = features.source?.kind ?? "";
+            const total = features.total;
+            const drawn = features.features.length;
+            return {
+              id,
+              label: features.source?.name ?? "Registry layer",
+              color: kindHex(kind),
+              meta: `${kindLabel(kind)} · ${total} feature(s)${
+                features.truncated ? ` (first ${drawn} drawn)` : ""
+              }`,
+              data: features as unknown as GeoJSON.FeatureCollection,
+              bbox: bboxOfFeatures(features.features),
+            } satisfies RegistryLayer;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      return fetched.filter((layer): layer is RegistryLayer => layer !== null);
+    },
+  });
+
+  const rows = useMemo<LayerRow[]>(() => {
+    const dynamicRows: LayerRow[] = (registryLayers ?? []).map((layer) => ({
+      key: layer.id,
+      label: layer.label,
+      meta: layer.meta,
+      group: "Registry" as const,
+    }));
+    return [...LAYERS, ...dynamicRows];
+  }, [registryLayers]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return LAYERS;
-    return LAYERS.filter(
+    if (!needle) return rows;
+    return rows.filter(
       (layer) =>
         layer.label.toLowerCase().includes(needle) || layer.meta.toLowerCase().includes(needle),
     );
-  }, [query]);
+  }, [rows, query]);
 
-  const shownCount = LAYERS.filter((layer) => visible[layer.key]).length;
+  const shownCount =
+    rows.filter((layer) => visible[layer.key] ?? true).length;
 
-  function toggle(key: LayerKey) {
-    setVisible((current) => ({ ...current, [key]: !current[key] }));
+  const fitBounds = useMemo(() => {
+    const boxes = (registryLayers ?? [])
+      .map((layer) => layer.bbox)
+      .filter((box): box is [number, number, number, number] => box !== null);
+    if (boxes.length === 0) return null;
+    let [minx, miny, maxx, maxy] = SECTOR22_BBOX;
+    for (const [a, b, c, d] of boxes) {
+      if (a < minx) minx = a;
+      if (b < miny) miny = b;
+      if (c > maxx) maxx = c;
+      if (d > maxy) maxy = d;
+    }
+    return [minx, miny, maxx, maxy] as [number, number, number, number];
+  }, [registryLayers]);
+
+  function toggle(key: string) {
+    setVisible((current) => ({ ...current, [key]: !(current[key] ?? true) }));
   }
 
   return (
@@ -137,7 +263,8 @@ export default function MapPage() {
         </div>
         <p className="small" style={{ margin: 0, color: "var(--text-muted)", maxWidth: "56ch" }}>
           Storage CRS EPSG:32643 (WGS 84 / UTM 43N). Basemap is Esri World Imagery (attribution on
-          the map); ORI drone imagery is not ingested yet, and OSM stays as an alternative basemap.
+          the map); registered vector layers load from the API under “Registry layers”, and OSM
+          stays as an alternative basemap.
         </p>
       </header>
 
@@ -183,7 +310,7 @@ export default function MapPage() {
         </div>
 
         <span className="small" style={{ color: "var(--text-muted)" }}>
-          {shownCount} of {LAYERS.length} layers visible
+          {shownCount} of {rows.length} layers visible
         </span>
 
         <button
@@ -215,15 +342,15 @@ export default function MapPage() {
           </label>
 
           {GROUPS.map((group) => {
-            const rows = filtered.filter((layer) => layer.group === group);
-            if (rows.length === 0) return null;
+            const groupRows = filtered.filter((layer) => layer.group === group);
+            if (groupRows.length === 0) return null;
             return (
               <section key={group} style={{ marginBottom: "14px" }}>
                 <h2 className="label" style={{ margin: "0 0 6px", color: "var(--text-muted)" }}>
-                  {group} ({rows.length})
+                  {group} ({groupRows.length})
                 </h2>
                 <div style={{ display: "grid", gap: "2px" }}>
-                  {rows.map((layer) => (
+                  {groupRows.map((layer) => (
                     <div
                       key={layer.key}
                       style={{
@@ -233,15 +360,15 @@ export default function MapPage() {
                         gap: "8px",
                         padding: "8px 6px",
                         borderRadius: "var(--radius-control)",
-                        background: visible[layer.key] ? "var(--paper-200)" : "transparent",
+                        background: visible[layer.key] ?? true ? "var(--paper-200)" : "transparent",
                       }}
                     >
                       <button
                         type="button"
                         onClick={() => toggle(layer.key)}
-                        aria-pressed={visible[layer.key]}
-                        aria-label={`${visible[layer.key] ? "Hide" : "Show"} ${layer.label}`}
-                        title={visible[layer.key] ? "Hide layer" : "Show layer"}
+                        aria-pressed={visible[layer.key] ?? true}
+                        aria-label={`${(visible[layer.key] ?? true) ? "Hide" : "Show"} ${layer.label}`}
+                        title={(visible[layer.key] ?? true) ? "Hide layer" : "Show layer"}
                         style={{
                           display: "grid",
                           placeItems: "center",
@@ -254,7 +381,7 @@ export default function MapPage() {
                           color: "var(--text)",
                         }}
                       >
-                        {visible[layer.key] ? <Eye size={14} /> : <EyeOff size={14} />}
+                        {(visible[layer.key] ?? true) ? <Eye size={14} /> : <EyeOff size={14} />}
                       </button>
                       <span style={{ minWidth: 0 }}>
                         <span
@@ -264,15 +391,22 @@ export default function MapPage() {
                             alignItems: "center",
                             gap: "8px",
                             fontWeight: 500,
-                            opacity: visible[layer.key] ? 1 : 0.55,
+                            opacity: (visible[layer.key] ?? true) ? 1 : 0.55,
                           }}
                         >
-                          <LayerPreview layer={layer.key} />
+                          <LayerPreview
+                            layer={layer.key}
+                            color={(registryLayers ?? []).find((l) => l.id === layer.key)?.color}
+                          />
                           {layer.label}
                         </span>
                         <span
                           className="small"
-                          style={{ display: "block", color: "var(--text-muted)", marginTop: "2px" }}
+                          style={{
+                            display: "block",
+                            color: "var(--text-muted)",
+                            marginTop: "2px",
+                          }}
                         >
                           {layer.meta}
                         </span>
@@ -304,11 +438,23 @@ export default function MapPage() {
               />
               Administrative boundary (municipal)
             </li>
+            <li className="small" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span
+                aria-hidden="true"
+                style={{ width: "18px", height: "3px", background: "var(--layer-canonical)" }}
+              />
+              Your registered vector layers
+            </li>
           </ul>
         </aside>
 
         <section className="panel wb-map" aria-label="Map of Sector 22, Chandigarh">
-          <MapCanvas visible={visible} fitKey={fitKey} />
+          <MapCanvas
+            visible={visible}
+            fitKey={fitKey}
+            dynamicLayers={registryLayers ?? []}
+            fitBounds={fitBounds}
+          />
           <div className="wb-hud">
             <span className="label" style={{ color: "var(--text)" }}>
               Sector 22 extent

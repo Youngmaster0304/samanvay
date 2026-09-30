@@ -53,3 +53,5 @@ Thumbs.db
 
 # Debug screenshots captured during development
 docs/_*.png
+.vercel
+.env*

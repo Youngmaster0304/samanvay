@@ -16,10 +16,9 @@ services:
     healthCheckPath: /healthz
     autoDeployTrigger: commit
     envVars:
-      # Set to the Vercel production URL after the frontend is deployed
-      # (single-origin CORS; the API refuses any other origin).
+      # Single-origin CORS: the API refuses any other origin.
       - key: WEB_ORIGIN
-        value: http://localhost:3000
+        value: https://web-youngmaster0304s-projects.vercel.app
       - key: POLICY_PATH
         value: /app/policies/naksha_default.yaml
       - key: STORAGE_SRID

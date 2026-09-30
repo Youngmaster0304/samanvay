@@ -1,0 +1,15 @@
+# Keeps the free-tier services awake (Render spins them down after ~15 min
+# idle; cold start is ~40-50s). /readyz pings Postgres, Redis and MinIO too,
+# so one request keeps the whole stack warm.
+name: keepalive
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake API + dependencies
+        run: curl -sf --retry 3 --max-time 90 https://samanvay-api-wjkk.onrender.com/readyz

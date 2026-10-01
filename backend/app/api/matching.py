@@ -2,6 +2,8 @@
 
 - `POST /matches/detect`  score and assign 1-to-1 polygon matches between two
   loaded sources (radius blocking, logistic scorer, Hungarian assignment).
+- `POST /matches/offset`  estimate (and optionally apply) the translation that
+  aligns source B onto source A; applying writes a linked corrected copy.
 - `GET  /matches`         the accepted matches, filterable by source, each with
   the pair features that justified it.
 """
@@ -19,6 +21,7 @@ from app.core.config import get_settings
 from app.core.policy import PolicyBundle, get_policy
 from app.db.session import get_session
 from app.ingest.errors import IngestError
+from app.matching import offset as offset_service
 from app.matching import service as matching_service
 
 router = APIRouter(prefix="/matches", tags=["matches"])
@@ -38,6 +41,12 @@ class DetectIn(BaseModel):
     source_b: UUID
 
 
+class OffsetIn(BaseModel):
+    source_a: UUID
+    source_b: UUID
+    apply: bool = False
+
+
 def _refuse(exc: IngestError) -> HTTPException:
     return HTTPException(status_code=exc.status, detail=exc.as_detail())
 
@@ -50,6 +59,19 @@ def _refuse(exc: IngestError) -> HTTPException:
 def post_detect(body: DetectIn, session: SessionDep, policy: PolicyDep) -> dict[str, Any]:
     try:
         return matching_service.detect_matches(session, body.source_a, body.source_b, policy=policy)
+    except IngestError as exc:
+        raise _refuse(exc) from exc
+
+
+@router.post(
+    "/offset",
+    summary="Estimate the translation that aligns source B onto source A",
+)
+def post_offset(body: OffsetIn, session: SessionDep, policy: PolicyDep) -> dict[str, Any]:
+    try:
+        return offset_service.estimate_offset(
+            session, body.source_a, body.source_b, policy=policy, apply=body.apply
+        )
     except IngestError as exc:
         raise _refuse(exc) from exc
 

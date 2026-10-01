@@ -156,3 +156,126 @@ def test_disjoint_and_refusals(api: tuple[TestClient, MemoryStore]) -> None:
     )
     assert not_loaded.status_code == 422
     assert not_loaded.json()["detail"]["code"] == "source_not_loaded"
+
+
+def _shifted(
+    west: float, south: float, east: float, north: float, dlon: float, dlat: float
+) -> dict[str, object]:
+    geom = _square(west, south, east, north)
+    rings = geom["coordinates"]
+    geom["coordinates"] = [[[x + dlon, y + dlat] for x, y in ring] for ring in rings]
+    return geom
+
+
+def test_offset_estimate_recovers_a_known_shift(api: tuple[TestClient, MemoryStore]) -> None:
+    client, _store = api
+    # B is A translated by about +5 m east, +3 m north (Sector 22 latitude).
+    dlon, dlat = 4.94e-5, 2.71e-5
+    source_a = _register_many(
+        client, [_square(76.773, 30.733, 76.774, 30.734), _square(76.776, 30.736, 76.777, 30.737)]
+    )
+    source_b = _register_many(
+        client,
+        [
+            _shifted(76.773, 30.733, 76.774, 30.734, dlon, dlat),
+            _shifted(76.776, 30.736, 76.777, 30.737, dlon, dlat),
+        ],
+        kind="footprint_ai",
+    )
+
+    estimated = client.post("/matches/offset", json={"source_a": source_a, "source_b": source_b})
+    assert estimated.status_code == 200, estimated.text
+    body = estimated.json()
+
+    assert body["pairs_confident"] == 2 and body["pairs_used"] == 2
+    assert body["pairs_rejected"] == 0
+    assert abs(body["offset_dx_m"] - 5.0) < 0.4
+    assert abs(body["offset_dy_m"] - 3.0) < 0.4
+    assert abs(body["correction_dx_m"] + 5.0) < 0.4
+    assert body["method"] == "median_mad"
+    # The correction moves B west-southwest: bearing between 210 and 270 deg.
+    assert 210.0 < body["correction_bearing_deg"] < 270.0
+    assert body["applied"] is None and body["rematched"] is None
+
+    same = client.post("/matches/offset", json={"source_a": source_a, "source_b": source_a})
+    assert same.status_code == 422
+    assert same.json()["detail"]["code"] == "same_source"
+
+
+def test_offset_mad_rejects_a_planted_outlier(api: tuple[TestClient, MemoryStore]) -> None:
+    client, _store = api
+    dlon, dlat = 4.94e-5, 2.71e-5  # the true shift: ~5 m east, ~3 m north
+    out_dlon = dlon + 9.0e-5  # one extra ~9 m east, still inside the 15 m radius
+    squares = [
+        _square(76.7730 + 0.0005 * i, 30.7330, 76.7733 + 0.0005 * i, 30.7333) for i in range(5)
+    ]
+    source_a = _register_many(client, squares)
+    shifted = [
+        _shifted(west, south, east, north, out_dlon if i == 2 else dlon, dlat)
+        for i, geom in enumerate(squares)
+        for west, south, east, north in [
+            (
+                geom["coordinates"][0][0][0],
+                geom["coordinates"][0][0][1],
+                geom["coordinates"][0][2][0],
+                geom["coordinates"][0][2][1],
+            )
+        ]
+    ]
+    source_b = _register_many(client, shifted, kind="footprint_ai")
+
+    estimated = client.post("/matches/offset", json={"source_a": source_a, "source_b": source_b})
+    assert estimated.status_code == 200, estimated.text
+    body = estimated.json()
+
+    assert body["pairs_confident"] == 5
+    assert body["pairs_used"] == 4
+    assert body["pairs_rejected"] == 1
+    assert abs(body["offset_dx_m"] - 5.0) < 0.5
+    assert abs(body["offset_dy_m"] - 3.0) < 0.5
+
+
+def test_offset_apply_writes_a_linked_copy_and_rematches(
+    api: tuple[TestClient, MemoryStore],
+) -> None:
+    client, _store = api
+    dlon, dlat = 4.94e-5, 2.71e-5
+    source_a = _register_many(client, [_square(76.773, 30.733, 76.774, 30.734)])
+    source_b = _register_many(
+        client, [_shifted(76.773, 30.733, 76.774, 30.734, dlon, dlat)], kind="footprint_ai"
+    )
+
+    applied = client.post(
+        "/matches/offset",
+        json={"source_a": source_a, "source_b": source_b, "apply": True},
+    )
+    assert applied.status_code == 200, applied.text
+    body = applied.json()
+
+    derived_id = body["applied"]["source_id"]
+    assert body["applied"]["name"].endswith("(offset-corrected)")
+    assert body["applied"]["feature_count"] == 1
+    # After the correction the copy sits back on A, so matching accepts it.
+    assert body["rematched"] is not None
+    assert body["rematched"].get("error") is None
+    assert body["rematched"]["assigned"] >= 1
+
+    # The corrected copy lands on A: first corner within ~1 m of A's corner.
+    features = client.get(f"/sources/{derived_id}/features.geojson")
+    assert features.status_code == 200, features.text
+    ring = features.json()["features"][0]["geometry"]["coordinates"][0]
+    assert abs(ring[0][0] - 76.773) < 1e-4 and abs(ring[0][1] - 30.733) < 1e-4
+
+    # Idempotent: re-running returns the same derived row, never a second copy.
+    again = client.post(
+        "/matches/offset",
+        json={"source_a": source_a, "source_b": source_b, "apply": True},
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["applied"]["source_id"] == derived_id
+
+    # The original B still holds its own (unmoved) geometry.
+    original = client.get(f"/sources/{source_b}/features.geojson")
+    orig_ring = original.json()["features"][0]["geometry"]["coordinates"][0]
+    assert abs(orig_ring[0][0] - (76.773 + dlon)) < 1e-7
+    assert abs(orig_ring[0][1] - (30.733 + dlat)) < 1e-7

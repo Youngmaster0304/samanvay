@@ -154,3 +154,60 @@ docs series (`docs/stage-N.md`), with the mapping to the master prompt noted.
 - [x] `GET /features.geojson` -> 60 features, first coord 76.774, 30.731 (WGS 84)
 - [x] `/readyz` all green (db/redis/object_store/policy); web /sources 200
 - [x] dataset card now embeds the preview `<img>` for raster sources (web gates green after)
+
+## Stage 4 rest - matching v1 (2026-10-01, in progress)
+
+### Slice A - radius blocking + pair features + logistic scorer + Hungarian
+- [ ] policy: `matching.weights` + `matching.bias` added to naksha_default.yaml (priors [P]);
+      `matching_limits` parses search_radius_m, weights, bias (validated numerics)
+- [ ] blocking: `ST_DWithin(a, b, radius)` where radius = search_radius_m +
+      3*sqrt(sigma_a^2 + sigma_b^2) [P heuristic] - near-miss pairs now become candidates
+      (ST_Intersects alone cannot see offset layers); max_pairs guard unchanged
+- [ ] pair features per candidate (storage CRS = metres): iou, iom (inter/min area),
+      centroid distance, area_ratio (min/max), orientation diff (PCA axis, fold to 90),
+      compactness diff (4piA/P^2), attribute similarity (fuzzy difflib over shared
+      raw_props keys, capped)
+- [ ] scorer: score = sigmoid(sum(w_i * x_i) + bias), inputs normalised to [0,1],
+      weights from policy
+- [ ] assignment: scipy `linear_sum_assignment` on cost 1-score, solved per connected
+      component (union-find) so sparse graphs stay cheap; accept score >= accept_threshold;
+      method="hungarian"; add scipy dependency
+- [ ] store pair feature values on FeatureMatch (nullable JSONB `pair_features`) + alembic
+      migration; response gains blocking radius / method / near-miss count
+- [ ] tests: scorer monotonicity + sigmoid range, Hungarian beats greedy on the classic
+      swap case, radius blocking finds near-miss pairs, API response fields, migration up
+
+### Slice B - offset estimation (backend.md 5.4)
+- [ ] `POST /matches/offset` {source_a, source_b, apply?}: confident pairs (iou>=0.5),
+      centroid displacement B-A, median -> MAD rejection -> re-estimate; returns
+      dx/dy/bearing, n_pairs used/total, residual rmse (all in metres)
+- [ ] apply=true: new registry row (name suffix "(offset-corrected)", sha256 =
+      orig+offset marker, notes links original), source_feature rows translated by
+      -offset, coverage translated, TransformLog row (pipeline="offset_correction",
+      params: dx,dy,bearing,n_pairs,rmse,derived_from); then re-run detect_matches
+      against the corrected copy; idempotent by derived name
+- [ ] tests: synthetic two-layer fixture with known 5m/25deg offset -> recovered within
+      tolerance; MAD rejects a planted outlier; apply creates linked copy + re-match
+
+### Slice C - surface it
+- [ ] honest UI for offset results + accepted matches (placement decision pending)
+- [ ] demo/seed update: drone footprints vs OSM buildings matches on prod
+- [ ] gates both stacks; commit/push; live verify
+
+### Slice A status - DONE (2026-10-01)
+- [x] policy weights+bias in naksha_default.yaml; matching_limits reads accept_threshold,
+      max_pairs, search_radius_m; matching_weights validates the seven weights + bias
+- [x] ST_DWithin blocking (radius = search_radius_m + 3*combined sigma); near-miss pairs
+      counted and scored
+- [x] pair_features: iou, iom, distance(_m), area_ratio, orientation (PCA axis folded to
+      90 deg), compactness (4piA/P^2 via shapely .length), attribute (exact/fuzzy difflib
+      over shared scalar raw_props, numbers exact-match to 1.0)
+- [x] logistic scorer, scipy Hungarian per connected component (union-find) with greedy
+      fallback above 1e6 dense cells (fallback count reported); scipy>=1.14 added
+- [x] feature_match.pair_features jsonb + migration 0006 (applied locally: 0005->0006);
+      list_matches returns pair_features; response gains blocking_radius_m, assignment,
+      near_miss_candidates, greedy_fallback_components, policy weights+bias
+- [x] tests: test_matching_scoring.py (6 pure tests incl. Hungarian-vs-greedy swap case)
+      + API assertions updated to method="hungarian"
+- [x] gates: ruff / format / mypy (54 files) / pytest 97 tests - all green
+- [ ] commit + push, then Slice B (offset estimation)

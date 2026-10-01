@@ -1,7 +1,9 @@
-"""Matching endpoints (plan Stage 4, first slice).
+"""Matching endpoints (plan Stage 4).
 
-- `POST /matches/detect`  assign 1-to-1 polygon matches between two loaded sources.
-- `GET  /matches`         the accepted matches, filterable by source.
+- `POST /matches/detect`  score and assign 1-to-1 polygon matches between two
+  loaded sources (radius blocking, logistic scorer, Hungarian assignment).
+- `GET  /matches`         the accepted matches, filterable by source, each with
+  the pair features that justified it.
 """
 
 from __future__ import annotations
@@ -42,7 +44,7 @@ def _refuse(exc: IngestError) -> HTTPException:
 
 @router.post(
     "/detect",
-    summary="Match polygon features of two loaded sources by IoU",
+    summary="Score and assign 1-to-1 polygon matches between two loaded sources",
     status_code=201,
 )
 def post_detect(body: DetectIn, session: SessionDep, policy: PolicyDep) -> dict[str, Any]:

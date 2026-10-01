@@ -21,6 +21,7 @@ dependencies = [
     "rasterio>=1.3",
     # CRS engine (Stage 3): geometry columns and rubber-sheeting.
     "geoalchemy2>=0.15",
+    "scipy>=1.14",
 ]
 
 [project.optional-dependencies]

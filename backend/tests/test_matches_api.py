@@ -99,15 +99,21 @@ def test_greedy_assignment_is_one_to_one_and_above_the_threshold(
     assert summary["pairs_examined"] == 2
     assert summary["polygon_candidates"] == 2
     assert summary["assigned"] == 1
+    assert summary["assignment"] == "hungarian"
+    assert summary["greedy_fallback_components"] == 0
+    assert summary["blocking_radius_m"] >= 15.0
     assert summary["score_min"] is not None and summary["score_min"] >= 0.60
     assert summary["score_max"] is not None and summary["score_max"] <= 1.0
     limits = summary["policy"]["limits"]
     assert limits["accept_threshold"] == 0.60 and limits["max_pairs"] == 5000.0
+    assert summary["policy"]["weights"]["iou"] == 3.0
 
     items = _pairs_for(client, source_a, source_b)
     assert len(items) == 1
     assert items[0]["score"] >= 0.60
-    assert items[0]["method"] == "iou_greedy"
+    assert items[0]["method"] == "hungarian"
+    stored = items[0]["pair_features"]
+    assert stored is not None and stored["iou"] > 0.5 and stored["distance_m"] > 0
     assert "naksha" in items[0]["source_a_name"] or items[0]["source_a_name"]
 
     # Re-running replaces the pair whole: still exactly one row, no duplicates.

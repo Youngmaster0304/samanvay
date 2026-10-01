@@ -247,9 +247,10 @@ class ConflictDecision(Base):
 class FeatureMatch(Base):
     """One accepted 1-to-1 match between polygon features of two sources (plan Stage 4).
 
-    `score` is intersection-over-union in [0, 1]; `method` records how the pair was
-    assigned. Matches carry no decision history yet: a re-run replaces the pair's
-    rows whole (migration 0005).
+    `score` is the logistic scorer's output in [0, 1]; `method` records how the pair
+    was assigned (`hungarian`, or a per-component greedy fallback). `pair_features`
+    keeps the values the scorer saw, so the decision can be explained later. Matches
+    carry no decision history yet: a re-run replaces the pair's rows whole.
     """
 
     __tablename__ = "feature_match"
@@ -275,6 +276,7 @@ class FeatureMatch(Base):
     fid_b: Mapped[str] = mapped_column(Text)
     score: Mapped[float] = mapped_column(Double)
     method: Mapped[str] = mapped_column(String(32))
+    pair_features: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, server_default="now()"

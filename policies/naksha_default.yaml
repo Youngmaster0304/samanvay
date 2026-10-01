@@ -54,6 +54,17 @@ matching:
   accept_threshold: 0.60           # [P] minimum score to accept a 1-to-1 assignment
   split_merge_cover_pct: 85.0      # [P] parts must cover this share of the whole
   max_pairs: 5000                  # refuse rather than grind when two sources overlap too much
+  # Logistic scorer: score = sigmoid(sum(weight * normalised_feature) + bias).
+  # Every value is a starting prior [P]; calibrate on hand-labeled pairs from the AOI.
+  bias: -1.5
+  weights:
+    iou: 3.0              # intersection over union, in [0, 1]
+    iom: 1.5              # intersection over min-area, in [0, 1]
+    distance: -2.0        # centroid distance / blocking radius, far = 1
+    area_ratio: 1.0       # min area / max area
+    orientation: -1.0     # axis difference folded to [0, 90] deg / 90, far = 1
+    compactness: -1.0     # |4*pi*A/P^2 difference|, in [0, 1]
+    attribute: 1.5        # exact/fuzzy similarity of shared attributes, in [0, 1]
 
 # --- Topology repair bounds --------------------------------------------------
 topology:

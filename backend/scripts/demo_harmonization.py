@@ -26,7 +26,7 @@ def call(method: str, path: str, payload: dict | None = None) -> dict:
         method=method,
         headers={"Content-Type": "application/json"} if data else {},
     )
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, timeout=120) as response:
         return json.loads(response.read().decode())
 
 
@@ -64,7 +64,7 @@ def post_source(
         method="POST",
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, timeout=120) as response:
         return json.loads(response.read().decode())["source_id"]
 
 

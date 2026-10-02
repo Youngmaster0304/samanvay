@@ -1,13 +1,16 @@
 """Registering a source, and reading the registry back.
 
-`POST /sources` is the one write endpoint at Stage 1. It is idempotent twice over: by
+`POST /sources` is the Stage 1 write endpoint. It is idempotent twice over: by
 `Idempotency-Key` when the client sends one, and by content, because the same bytes and
 the same kind already have exactly one row (`backend.md` §5.1). A repeated upload
-returns that row with `reused: true` and status 200 instead of a second record.
+returns that row with `reused: true` and status 200 instead of a second record;
+when the object store lost those bytes, the reuse restores them. `DELETE
+/sources/{id}` is owner cleanup: row, features, matches and stored bytes.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import date
 from typing import Annotated, Any
@@ -329,3 +332,29 @@ def get_source(
             detail={"code": "source_not_found", "message": f"no source {source_id}"},
         )
     return _stored(row)
+
+
+@router.delete(
+    "/{source_id}",
+    status_code=204,
+    summary="Remove a source, its features, matches and stored bytes",
+)
+def delete_source(
+    source_id: UUID,
+    session: SessionDep,
+    store: StoreDep,
+) -> Response:
+    """Owner cleanup for bad or expired uploads.
+
+    Child rows (features, transforms, matches, conflicts) go with the registry row
+    through the schema's `ON DELETE CASCADE`. Dropping the stored bytes is
+    best-effort: a missing object is the state we are deleting towards anyway.
+    """
+    row = _require_row(session, source_id)
+    object_key = row.object_key
+    session.delete(row)
+    session.commit()
+    # The row is gone; a leaked object is harmless, so cleanup stays best-effort.
+    with contextlib.suppress(Exception):
+        store.delete(object_key)
+    return Response(status_code=204)

@@ -200,6 +200,18 @@ def ingest_upload(
         existing = _find_existing(session, client_key=key, sha256=sha256, kind=source_kind.value)
         if existing is not None:
             reason = "idempotency_key" if key and existing.client_key == key else "same_sha256"
+            # The store is ephemeral on the demo host: a redeploy can empty the
+            # bucket while the registry rows survive. Reuse must then restore the
+            # bytes too, otherwise the row keeps pointing at nothing.
+            if not store.exists(existing.object_key):
+                content_type = _UPLOAD_CONTENT_TYPES.get(Path(upload_name).suffix.lower(), "")
+                with open(original, "rb") as handle:
+                    store.put(
+                        existing.object_key,
+                        handle,
+                        original.stat().st_size,
+                        content_type=content_type,
+                    )
             return IngestResult(row=existing, reused=True, reuse_reason=reason)
 
         payload = original

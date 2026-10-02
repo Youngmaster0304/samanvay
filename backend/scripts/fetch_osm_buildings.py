@@ -134,7 +134,7 @@ def register() -> str:
         method="POST",
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, timeout=120) as response:
         result = json.loads(response.read().decode())
     return str(result["source_id"])
 

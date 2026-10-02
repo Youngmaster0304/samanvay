@@ -142,9 +142,11 @@ def build(scene: dict) -> None:
         "transform": transform,
         "compress": "deflate",
     }
-    with MemoryFile() as memory, memory.open(**profile) as dataset:
+    memory = MemoryFile()
+    with memory.open(**profile) as dataset:
         dataset.write(rgb)
-        payload = memory.read()
+    payload = memory.read()
+    memory.close()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_bytes(payload)
     print(f"saved {len(payload)} bytes to {OUT}")

@@ -46,6 +46,12 @@ class MemoryStore:
         except KeyError as exc:
             raise FileNotFoundError(key) from exc
 
+    def exists(self, key: str) -> bool:
+        return key in self.objects
+
+    def delete(self, key: str) -> None:
+        self.objects.pop(key, None)
+
 
 @pytest.fixture()
 def api(db: Session) -> Iterator[tuple[TestClient, MemoryStore]]:
@@ -480,3 +486,41 @@ def test_preview_refuses_an_unknown_source(api: tuple[TestClient, MemoryStore]) 
 
     assert info.status_code == 404
     assert info.json()["detail"]["code"] == "source_not_found"
+
+
+def test_reuse_restores_bytes_the_store_lost(
+    api: tuple[TestClient, MemoryStore],
+) -> None:
+    client, store = api
+    name = _test_name()
+    payload = _geojson("wipe")
+
+    first = _post(client, payload=payload, filename="layer.geojson", name=name)
+    assert first.status_code == 201, first.text
+    key = first.json()["object_key"]
+    store.objects.pop(key)  # the ephemeral bucket was emptied by a redeploy
+
+    second = _post(client, payload=payload, filename="layer.geojson", name=name)
+
+    assert second.status_code == 200, second.text
+    assert second.json()["reused"] is True
+    assert key in store.objects, "reuse must repopulate bytes the store lost"
+    assert store.objects[key] == payload
+
+
+def test_delete_removes_row_features_and_bytes(api: tuple[TestClient, MemoryStore]) -> None:
+    client, store = api
+    created = _post(client, payload=_geojson("gone"), filename="layer.geojson", name=_test_name())
+    assert created.status_code == 201, created.text
+    source_id = created.json()["source_id"]
+    key = created.json()["object_key"]
+
+    listed = client.get(f"/sources/{source_id}/features.geojson")
+    assert listed.status_code == 200, listed.text
+
+    removed = client.delete(f"/sources/{source_id}")
+    assert removed.status_code == 204
+    assert client.get(f"/sources/{source_id}").status_code == 404
+    assert client.get(f"/sources/{source_id}/features.geojson").status_code == 404
+    assert key not in store.objects, "the stored bytes must go with the row"
+    assert client.delete(f"/sources/{source_id}").status_code == 404

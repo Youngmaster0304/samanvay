@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import BinaryIO, Protocol
 
+from minio.error import S3Error
+
 from app.core.config import get_settings
 from app.core.objectstore import get_object_store
 
@@ -17,6 +19,14 @@ class ObjectStore(Protocol):
 
     def get(self, key: str) -> bytes:
         """Read every byte stored under `key`; raises an error when the key is absent."""
+        ...
+
+    def exists(self, key: str) -> bool:
+        """Whether `key` still has stored bytes (the store may be ephemeral)."""
+        ...
+
+    def delete(self, key: str) -> None:
+        """Drop the stored bytes for `key`; absent keys are a no-op."""
         ...
 
 
@@ -35,12 +45,34 @@ class MinioObjectStore:
         )
 
     def get(self, key: str) -> bytes:
-        response = self._client.get_object(self._bucket, key)
+        try:
+            response = self._client.get_object(self._bucket, key)
+        except S3Error as exc:
+            if exc.code in ("NoSuchKey", "NoSuchObject"):
+                raise FileNotFoundError(key) from exc
+            raise
         try:
             return response.read()
         finally:
             response.close()
             response.release_conn()
+
+    def exists(self, key: str) -> bool:
+        try:
+            self._client.stat_object(self._bucket, key)
+        except S3Error as exc:
+            if exc.code in ("NoSuchKey", "NoSuchObject"):
+                return False
+            raise
+        return True
+
+    def delete(self, key: str) -> None:
+        try:
+            self._client.remove_object(self._bucket, key)
+        except S3Error as exc:
+            if exc.code in ("NoSuchKey", "NoSuchObject"):
+                return
+            raise
 
 
 def get_store() -> ObjectStore:

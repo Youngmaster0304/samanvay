@@ -20,6 +20,7 @@ Run against any API:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -58,11 +59,23 @@ FOOTPRINT_NAME = "SYNTHETIC demo AI footprints (OSM-derived, jittered)"
 def post_bytes(
     data: bytes, *, filename: str, kind: str, name: str, extra: dict[str, str] | None = None
 ) -> str:
-    """Register raw bytes as a source; re-run reuses the name instead of duplicating."""
+    """Register raw bytes as a source.
+
+    Always POSTs: the server dedups by content hash and, when its ephemeral
+    bucket lost the stored bytes, restores them on that reuse. A same-named
+    source with different content is superseded (deleted) first, so a rebuild
+    does not leave two rows with one name.
+    """
+    local_sha = hashlib.sha256(data).hexdigest()
     for item in call("GET", "/sources")["items"]:
-        if item["name"] == name:
-            print(f"  reusing existing source {item['source_id']} ({name})")
-            return str(item["source_id"])
+        if item["name"] != name:
+            continue
+        if item["sha256"] == local_sha:
+            print(f"  {name}: same bytes as {item['source_id']}, POSTing to heal/confirm")
+        else:
+            print(f"  {name}: superseding {item['source_id']} (content changed)")
+            call("DELETE", f"/sources/{item['source_id']}")
+        break
     fields = {"name": name, "kind": kind, "licence": "CC0-1.0"}
     fields.update(extra or {})
     boundary = uuid.uuid4().hex
@@ -83,7 +96,7 @@ def post_bytes(
         method="POST",
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
     )
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, timeout=120) as response:
         return str(json.loads(response.read().decode())["source_id"])
 
 

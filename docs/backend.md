@@ -311,6 +311,7 @@ Owner and personal fields are **never** present here.
 | Method and path | Purpose |
 |---|---|
 | `POST /sources` | Register and upload a source with licence and `is_synthetic` |
+| `DELETE /sources/{id}` | Owner cleanup: removes the row, its features, matches and stored bytes |
 | `GET /sources`, `GET /sources/{id}/health` | List, plus CRS residuals, coverage and schema summary |
 | `POST /runs` | Start harmonization for an AOI with a policy version |
 | `GET /runs/{id}` | Stage progress, timings, counts, errors |

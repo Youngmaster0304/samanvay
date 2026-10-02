@@ -78,9 +78,11 @@ def build() -> None:
         "nodata": nodata,
         "compress": "deflate",
     }
-    with MemoryFile() as memory, memory.open(**profile) as dataset:
+    memory = MemoryFile()
+    with memory.open(**profile) as dataset:
         dataset.write(elevation.astype("float32"), 1)
-        payload = memory.read()
+    payload = memory.read()
+    memory.close()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_bytes(payload)
     print(f"saved {len(payload)} bytes to {OUT}")

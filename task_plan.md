@@ -211,3 +211,32 @@ docs series (`docs/stage-N.md`), with the mapping to the master prompt noted.
       + API assertions updated to method="hungarian"
 - [x] gates: ruff / format / mypy (54 files) / pytest 97 tests - all green
 - [ ] commit + push, then Slice B (offset estimation)
+
+
+### Slice B status - DONE (2026-10-01)
+- [x] POST /matches/offset endpoint (median/MAD residual, apply= derived copy) - commit 7265e3f
+- [x] deployed live (POST /matches/offset returns 405->routed, verified on Render)
+
+### More real datasets - DONE (2026-10-02)
+- [x] SourceKind.SATELLITE + raster-only format rule; web label/colour marigold-700 #933b08
+      (blue rejected by design-token tests); design.md 3.3 row; commit 9797b26
+- [x] scripts: fetch_sentinel2.py (Earth Search STAC, S2B_43RFQ_20260518 cloud 0.000472%,
+      163x152 px EPSG:32643), fetch_terrain_dsm.py (Copernicus GLO-30 N30E076, 330-353 m),
+      fetch_osm_extras.py (landuse 7 / parks 47 / wards 4 via two-phase Overpass relations)
+- [x] MemoryFile bug: payload read inside open dataset -> all-black TIF; fixed both scripts
+      (dataset closed before memory.read()); rebuilt - sentinel mean 91, DEM 330-353 verified
+- [x] MinIO outage on Render (502): POST /sources 500; woken via /minio/health/live; bucket
+      wiped (ephemeral) - readyz green again
+- [x] resilience: ObjectStore exists/delete, S3Error->FileNotFoundError (preview 404 contract),
+      sha reuse re-puts lost bytes, DELETE /sources/{id} (204, cascade), 102 tests
+- [x] scripts heal on re-run: post_bytes/post_source always POST + supersede same-name
+      different-sha; call() handles 204 empty body (commit 7c7f0b8)
+- [x] prod repaired: satellite 5bfc3653 + dsm 55df7bde re-registered (preview 66460/6925 B,
+      non-black), ortho 141a5edf bytes healed (preview 1950804 B), buildings/parcels/roads/
+      boundary re-POSTed; 13 sources, no duplicate names; slice A/B re-verified live
+      (matches assigned=1 score 0.81, conflicts created=6)
+- [x] manifests: both data/osm + web/public/data copies list buildings/landuse/parks/wards
+      with sha256; About page attribution rewritten (Sentinel-2, Copernicus DEM, OSM layers,
+      synthetic disclaimer); backend.md endpoint table gains DELETE row
+- [x] gates: ruff / mypy (55 files) / pytest 102 green; web lint / typecheck / 22 tests /
+      build green

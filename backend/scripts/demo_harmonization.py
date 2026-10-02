@@ -8,6 +8,7 @@ Registers two clearly synthetic demo layers, then exercises the whole loop:
 3. the pilot roads x boundary -> `POST /conflicts/detect` fills the queue.
 """
 
+import hashlib
 import json
 import os
 import urllib.request
@@ -27,7 +28,8 @@ def call(method: str, path: str, payload: dict | None = None) -> dict:
         headers={"Content-Type": "application/json"} if data else {},
     )
     with urllib.request.urlopen(request, timeout=120) as response:
-        return json.loads(response.read().decode())
+        raw = response.read()
+    return json.loads(raw.decode()) if raw else {}  # 204 DELETE has no body
 
 
 def post_source(
@@ -38,12 +40,14 @@ def post_source(
     name: str,
     extra: dict[str, str] | None = None,
 ) -> str:
-    # Re-runs reuse the demo layer with the same name instead of duplicating it.
+    # Always POST: the server dedups by sha256 and re-puts bytes lost to an
+    # object-storage reset, so re-runs heal instead of duplicating. A same-name
+    # row whose content changed is replaced first.
+    sha = hashlib.sha256(json.dumps(payload).encode()).hexdigest()
     listing = call("GET", "/sources")
     for item in listing["items"]:
-        if item["name"] == name:
-            print(f"  reusing existing source {item['source_id']} ({name})")
-            return str(item["source_id"])
+        if item["name"] == name and item["sha256"] != sha:
+            call("DELETE", f"/sources/{item['source_id']}")
     boundary = uuid.uuid4().hex
     data = {"name": name, "kind": kind, "licence": "ODbL-1.0"}
     data.update(extra or {})

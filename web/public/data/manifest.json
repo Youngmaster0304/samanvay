@@ -15,6 +15,34 @@
       "endpoint": "overpass (maps.mail.ru mirror)",
       "query": "way[highway](30.7280,76.7700,30.7400,76.7900)",
       "kind": "municipal"
+    },
+    {
+      "file": "backend/data/osm/sector22_buildings.geojson",
+      "endpoint": "overpass (overpass-api.de)",
+      "query": "way[building](30.7263491,76.7629635,30.7397398,76.7797155)",
+      "kind": "footprint_ref",
+      "retrieved": "2026-09-30"
+    },
+    {
+      "file": "backend/data/osm/sector22_landuse.geojson",
+      "endpoint": "overpass (overpass-api.de)",
+      "query": "way[landuse](30.7263491,76.7629635,30.7397398,76.7797155)",
+      "kind": "municipal",
+      "retrieved": "2026-10-01"
+    },
+    {
+      "file": "backend/data/osm/sector22_parks.geojson",
+      "endpoint": "overpass (maps.mail.ru mirror)",
+      "query": "(way[leisure~^(park|garden|playground)$]; way[landuse=grass]; way[natural=wood])(30.7263491,76.7629635,30.7397398,76.7797155)",
+      "kind": "municipal",
+      "retrieved": "2026-10-01"
+    },
+    {
+      "file": "backend/data/osm/sector22_wards.geojson",
+      "endpoint": "overpass (overpass-api.de, ids then geometry by id)",
+      "query": "rel[boundary=administrative][admin_level=9](30.7263491,76.7629635,30.7397398,76.7797155)",
+      "kind": "municipal",
+      "retrieved": "2026-10-01"
     }
   ],
   "files": [
@@ -27,6 +55,26 @@
       "file": "sector22_roads.geojson",
       "sha256": "1a95ee84e659bb8f0dc49dfe9c3501a97a082258fe75143c8694a0dfd3cbf396",
       "bytes": 150260
+    },
+    {
+      "file": "backend/data/osm/sector22_buildings.geojson",
+      "sha256": "5506964ac03b39239f94e51b71f2146c0587cfe2a78e4f65c6b97d8087f96255",
+      "bytes": 216043
+    },
+    {
+      "file": "backend/data/osm/sector22_landuse.geojson",
+      "sha256": "c9868dbe52060f6443e540cdc3f0c714c2db6e9fbcb732fe4ae631ca04b1698d",
+      "bytes": 4686
+    },
+    {
+      "file": "backend/data/osm/sector22_parks.geojson",
+      "sha256": "6e3847b0dc49aa34e0f2a38c1beb5d94f3d328378d8f5010208bd5d666deccd5",
+      "bytes": 15457
+    },
+    {
+      "file": "backend/data/osm/sector22_wards.geojson",
+      "sha256": "ac1aaca05607e9bb48f26405661c68ed796266d1e36f2e24230443aaf90c5af2",
+      "bytes": 1926
     }
   ]
 }

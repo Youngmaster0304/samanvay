@@ -38,19 +38,26 @@ export default function AboutPage() {
           </h2>
           <ul style={{ margin: 0, paddingLeft: "20px", display: "grid", gap: "6px" }}>
             <li>
-              Map basemap and the Sector 22 boundary and road extracts are © OpenStreetMap
-              contributors, licensed ODbL 1.0, retrieved 2026-09-30. Checksums are recorded in{" "}
-              <span className="data">data/osm/manifest.json</span>.
+              Map basemap and the Sector 22 boundary, road, land-use, park/green and ward
+              extracts are © OpenStreetMap contributors, licensed ODbL 1.0, retrieved 2026-09-30.
+              Checksums are recorded in <span className="data">data/osm/manifest.json</span>.
             </li>
             <li>
-              A <strong>SYNTHETIC</strong> demo drone orthophoto is registered to exercise the
-              raster path and is drawn on the map from its preview; real ORI, cadastral sheets,
-              revenue records and utility maps have not been ingested, and those screens stay
-              empty rather than showing stand-ins.
+              Satellite imagery: a real Sentinel-2 L2A scene over Sector 22 (2026-05-18,
+              0.0005% cloud) is registered as satellite imagery, its colour bands stretched for
+              display — © ESA Copernicus, free use with attribution, delivered through the
+              open Element84 Earth Search archive.
             </li>
             <li>
-              Any dataset created purely for testing is flagged <strong>SYNTHETIC</strong> in the
-              registry and wherever it is drawn.
+              Elevation: the Copernicus DEM GLO-30 tile covering the pilot (© DLR / ESA,
+              TanDEM-X acquisitions 2011–2015, free use with attribution) is registered as a
+              real DSM with elevations in metres.
+            </li>
+            <li>
+              Synthetic demo layers (a drone orthophoto, two parcel layers, jittered AI
+              footprints) are flagged <strong>SYNTHETIC</strong> in the registry and wherever
+              they are drawn; real ORI, cadastral sheets, revenue records and utility maps have
+              not been ingested, and those screens stay empty rather than showing stand-ins.
             </li>
           </ul>
         </section>

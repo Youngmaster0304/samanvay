@@ -101,7 +101,7 @@ Keep everything in one CRS for storage, a metric CRS chosen per AOI (a UTM zone 
 CREATE TABLE source_registry (
   source_id      uuid PRIMARY KEY,
   name           text NOT NULL,
-  kind           text NOT NULL,   -- drone_ori | dsm | dtm | cadastral | revenue | municipal | utility | gnss | footprint_ai | footprint_ref
+  kind           text NOT NULL,   -- drone_ori | satellite | dsm | dtm | cadastral | revenue | municipal | utility | gnss | footprint_ai | footprint_ref
   authority      text,
   licence        text,
   url            text,

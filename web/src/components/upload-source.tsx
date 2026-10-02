@@ -31,6 +31,7 @@ const UPLOAD_KINDS = [
   "utility",
   "gnss",
   "drone_ori",
+  "satellite",
   "dsm",
   "dtm",
   "footprint_ai",

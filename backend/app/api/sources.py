@@ -104,7 +104,7 @@ def create_source(
     store: StoreDep,
     file: Annotated[UploadFile, File(description="GeoTIFF, GeoJSON, GeoPackage, shapefile or CSV")],
     name: Annotated[str, Form(min_length=1)],
-    kind: Annotated[str, Form(description="drone_ori | cadastral | revenue | ...")],
+    kind: Annotated[str, Form(description="drone_ori | satellite | cadastral | revenue | ...")],
     licence: Annotated[str, Form(min_length=1)],
     authority: Annotated[str | None, Form()] = None,
     url: Annotated[str | None, Form()] = None,

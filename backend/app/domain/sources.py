@@ -13,6 +13,7 @@ class SourceKind(StrEnum):
     """What a source *is*, from the point of view of the harmonization pipeline."""
 
     DRONE_ORI = "drone_ori"
+    SATELLITE = "satellite"
     DSM = "dsm"
     DTM = "dtm"
     CADASTRAL = "cadastral"
@@ -53,6 +54,7 @@ GEOMETRY_FORMATS: frozenset[SourceFormat] = VECTOR_FORMATS | {SourceFormat.CSV_G
 # Kinds whose payload shape is constrained. A kind with no entry accepts any supported
 # format: a cadastral source may legitimately arrive as vectors or as a scanned sheet.
 KIND_FORMAT_RULES: dict[SourceKind, frozenset[SourceFormat]] = {
+    SourceKind.SATELLITE: RASTER_FORMATS,
     SourceKind.DSM: RASTER_FORMATS,
     SourceKind.DTM: RASTER_FORMATS,
     SourceKind.GNSS: GEOMETRY_FORMATS,

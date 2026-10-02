@@ -105,6 +105,7 @@ describe("kind and format labels", () => {
   it("labels every backend source kind", () => {
     const kinds = [
       "drone_ori",
+      "satellite",
       "dsm",
       "dtm",
       "cadastral",

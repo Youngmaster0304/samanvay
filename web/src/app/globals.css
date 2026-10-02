@@ -43,6 +43,7 @@
 
   /* Map data palette (docs/design.md 3.3) */
   --layer-drone: #f26a1b;
+  --layer-satellite: #933b08;
   --layer-cadastral: #1a1712;
   --layer-revenue: #d9327a;
   --layer-municipal: #8fbf00;

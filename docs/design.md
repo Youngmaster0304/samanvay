@@ -117,6 +117,7 @@ Each source kind has one colour, always drawn with a casing so it reads on both 
 | Layer | Colour | Line style |
 |---|---|---|
 | Drone/AI-extracted | marigold-500 `#F26A1B` | solid, 2 px |
+| Satellite imagery | marigold-700 `#933B08` | solid, 1.5 px |
 | Legacy cadastral | ink-900 `#1A1712` | solid, 1.5 px, light casing |
 | Revenue records | rani-500 `#D9327A` | solid, 1.5 px |
 | Municipal | lime `#8FBF00` | solid, 1.5 px |

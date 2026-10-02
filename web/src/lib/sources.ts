@@ -195,6 +195,7 @@ export async function uploadSource(
 
 export const KIND_LABELS: Record<string, string> = {
   drone_ori: "Drone / ORI",
+  satellite: "Satellite imagery",
   dsm: "DSM (elevation)",
   dtm: "DTM (elevation)",
   cadastral: "Cadastral",
@@ -210,6 +211,7 @@ export const KIND_LABELS: Record<string, string> = {
 /** Map data palette for each source kind (docs/design.md 3.3). */
 export const KIND_COLORS: Record<string, string> = {
   drone_ori: "var(--layer-drone)",
+  satellite: "var(--layer-satellite)",
   dsm: "var(--layer-drone)",
   dtm: "var(--layer-utility)",
   cadastral: "var(--layer-cadastral)",
@@ -228,6 +230,7 @@ export const KIND_COLORS: Record<string, string> = {
  */
 export const KIND_HEX: Record<string, string> = {
   drone_ori: "#f26a1b",
+  satellite: "#933b08",
   dsm: "#f26a1b",
   dtm: "#e7a400",
   cadastral: "#1a1712",

@@ -55,3 +55,6 @@ Thumbs.db
 docs/_*.png
 .vercel
 .env*
+
+# Local-only explainer — must never be published to GitHub
+SIH_PROJECT_README.md

@@ -35,6 +35,11 @@ export function ApiStatus() {
     queryKey: ["readyz"],
     queryFn: () => fetchReadiness(),
     retry: 1,
+    // While a dependency is down (typically a sleeping free-tier service),
+    // keep re-checking so the table recovers on its own; stop once ready.
+    refetchInterval: (query) =>
+      query.state.data && query.state.data.status !== "ready" ? 8000 : false,
+    refetchIntervalInBackground: true,
   });
 
   return (
@@ -120,6 +125,13 @@ export function ApiStatus() {
             </tbody>
           </table>
           </div>
+        )}
+
+        {data && data.status !== "ready" && !isPending && (
+          <p className="small" style={{ color: "var(--text-muted)", margin: "8px 0 0" }}>
+            Re-checking automatically every 8 seconds while a dependency is down — cold
+            free-tier services usually answer within a minute.
+          </p>
         )}
       </div>
     </section>

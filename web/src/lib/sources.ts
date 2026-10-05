@@ -251,6 +251,27 @@ export function kindHex(kind: string): string {
   return KIND_HEX[kind] ?? "#8fbf00";
 }
 
+/**
+ * Map colour roles (docs/design.md 3.3). The map colours layers by ROLE —
+ * what the data is for — instead of by the twelve registry kinds, so the
+ * legend stays four colours: lime = municipal context, dark green = reference,
+ * marigold = synthetic demo, chilli red = boundary/attention (static layers).
+ */
+export type MapRole = "basemap" | "context" | "reference" | "synthetic";
+
+export const ROLE_HEX: Record<MapRole, string> = {
+  basemap: "#6b6252",
+  context: "#8fbf00",
+  reference: "#1f7a3e",
+  synthetic: "#f26a1b",
+};
+
+export function mapRole(isSynthetic: boolean, kind: string): { role: MapRole; hex: string } {
+  if (isSynthetic) return { role: "synthetic", hex: ROLE_HEX.synthetic };
+  if (kind === "municipal" || kind === "gnss") return { role: "context", hex: ROLE_HEX.context };
+  return { role: "reference", hex: ROLE_HEX.reference };
+}
+
 const FORMAT_LABELS: Record<string, string> = {
   geotiff: "GeoTIFF",
   geojson: "GeoJSON",

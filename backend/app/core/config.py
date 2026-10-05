@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     )
 
     check_timeout_seconds: float = Field(default=2.0, alias="CHECK_TIMEOUT_SECONDS")
+    objectstore_warmup_seconds: float = Field(
+        default=45.0,
+        alias="OBJECTSTORE_WARMUP_SECONDS",
+        description=(
+            "How long /readyz keeps re-probing a cold object store so one held "
+            "request carries a spun-down MinIO through its boot; 0 disables."
+        ),
+    )
 
     # Ingest bounds (Stage 1). These are operational limits on what a single upload is
     # allowed to cost the process, not quality thresholds: those live in the policy file.

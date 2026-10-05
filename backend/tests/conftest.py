@@ -11,6 +11,8 @@ POLICY_PATH = REPO_ROOT / "policies" / "naksha_default.yaml"
 
 # Must be set before app modules are imported: get_settings() is cached at import time.
 os.environ.setdefault("POLICY_PATH", str(POLICY_PATH))
+# Never spend the object-store warmup budget in tests (see app/core/objectstore.py).
+os.environ.setdefault("OBJECTSTORE_WARMUP_SECONDS", "0")
 
 from fastapi.testclient import TestClient  # noqa: E402
 

@@ -1,6 +1,9 @@
 # Keeps the free-tier services awake (Render spins them down after ~15 min
-# idle; cold start is ~40-50s). /readyz pings Postgres, Redis and MinIO too,
-# so one request keeps the whole stack warm.
+# idle; cold start is ~40-50 s). Step 1 holds a request on MinIO's public URL
+# until its boot completes; step 2 hits /readyz, which also warms Postgres and
+# Redis. GitHub throttles scheduled runs on quiet repos to a few hours apart,
+# so the API's own readyz warmup and the UI's 8 s auto-recheck are the primary
+# recovery paths - this workflow is defence in depth.
 name: keepalive
 on:
   schedule:
@@ -11,5 +14,17 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
+      - name: Wake MinIO object store
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 100 \
+            "https://samanvay-minio-pa1p.onrender.com/minio/health/live" || true)
+          echo "minio health/live -> $code"
+          [ "$code" = "200" ]
+
       - name: Wake API + dependencies
-        run: curl -sf --retry 3 --max-time 90 https://samanvay-api-wjkk.onrender.com/readyz
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 120 \
+            --retry 2 --retry-delay 20 \
+            "https://samanvay-api-wjkk.onrender.com/readyz" || true)
+          echo "api readyz -> $code"
+          [ "$code" = "200" ]

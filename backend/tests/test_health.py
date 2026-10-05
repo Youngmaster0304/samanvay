@@ -52,3 +52,41 @@ def test_policy_loads_from_yaml(policy_path: Path) -> None:
 def test_policy_loader_rejects_missing_file(tmp_path: Path) -> None:
     with pytest.raises(PolicyError, match="not found"):
         load_policy(tmp_path / "absent.yaml")
+
+
+def test_object_store_warmup_retries_until_it_comes_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A cold store is re-probed inside the budget instead of failing once.
+
+    This is the Render free-tier case: MinIO is asleep, the first probe gets a
+    502, and the held request must keep trying until the boot finishes.
+    """
+    from app.core import objectstore
+
+    monkeypatch.setattr(objectstore, "_RETRY_INTERVAL_SECONDS", 0.01)
+    attempts = {"count": 0}
+
+    class ColdThenUp:
+        def bucket_exists(self, bucket: str) -> bool:
+            attempts["count"] += 1
+            if attempts["count"] < 3:
+                raise ConnectionError("502 from a sleeping MinIO")
+            return True
+
+    monkeypatch.setattr(objectstore, "get_object_store", lambda: ColdThenUp())
+    result = objectstore.check_object_store(warmup_seconds=5.0)
+    assert result == {"ok": True, "bucket": objectstore.settings.minio_bucket}
+    assert attempts["count"] == 3
+
+
+def test_object_store_gives_up_after_the_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no warmup budget the probe fails fast and truthfully, as before."""
+    from app.core import objectstore
+
+    class AlwaysDown:
+        def bucket_exists(self, bucket: str) -> bool:
+            raise ConnectionError("still down")
+
+    monkeypatch.setattr(objectstore, "get_object_store", lambda: AlwaysDown())
+    result = objectstore.check_object_store(warmup_seconds=0.0)
+    assert result["ok"] is False
+    assert "ConnectionError" in str(result["error"])

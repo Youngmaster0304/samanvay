@@ -16,9 +16,10 @@ import {
   fetchSourceFeatures,
   fetchSourcePreview,
   fetchSources,
-  kindHex,
   kindLabel,
+  mapRole,
   previewPngUrl,
+  type MapRole,
 } from "@/lib/sources";
 
 type LayerGroup = "Basemap" | "Overlays" | "Registry";
@@ -28,10 +29,15 @@ interface LayerRow {
   label: string;
   meta: string;
   group: LayerGroup;
+  role: MapRole;
+  raster?: boolean;
+  defaultOn: boolean;
 }
 
 interface RegistryLayer extends DynamicLayer {
   meta: string;
+  role: MapRole;
+  synthetic: boolean;
 }
 
 /** The two municipal OSM sources are already drawn from static files. */
@@ -46,28 +52,62 @@ const LAYERS: LayerRow[] = [
     label: "Satellite imagery",
     meta: "Raster · Tiles © Esri, Maxar, Earthstar Geographics",
     group: "Basemap",
+    role: "basemap",
+    raster: true,
+    defaultOn: true,
   },
   {
     key: "osm",
     label: "OSM basemap",
     meta: "Raster · © OpenStreetMap contributors, ODbL 1.0",
     group: "Basemap",
+    role: "basemap",
+    raster: true,
+    defaultOn: false,
   },
   {
     key: "boundary",
     label: "Sector 22 boundary",
     meta: "Municipal · OSM relation 7894503 · 2026-09-30",
     group: "Overlays",
+    role: "context",
+    defaultOn: true,
   },
   {
     key: "roads",
     label: "Sector 22 roads",
     meta: "Municipal · 494 ways · ODbL 1.0",
     group: "Overlays",
+    role: "context",
+    defaultOn: true,
   },
 ];
 
 const GROUPS: LayerGroup[] = ["Basemap", "Overlays", "Registry"];
+
+/** Legend sections, in display order; each maps one map colour to its meaning. */
+const LEGEND_GROUPS: { role: MapRole; title: string; note: string }[] = [
+  {
+    role: "context",
+    title: "Context — real municipal data",
+    note: "Lime, boundary red · roads, land use, parks, wards (© OpenStreetMap, ODbL)",
+  },
+  {
+    role: "reference",
+    title: "Reference — real data",
+    note: "Dark green · buildings and other reference layers to align against",
+  },
+  {
+    role: "synthetic",
+    title: "Synthetic — demo data",
+    note: "Marigold · generated for the demo, never real records",
+  },
+  {
+    role: "basemap",
+    title: "Basemap",
+    note: "Satellite imagery and the alternative OSM base layer",
+  },
+];
 
 const FLOW = [
   { step: "01", label: "Upload data", hint: "Register & load", href: "/sources" },
@@ -103,7 +143,30 @@ function bboxOfFeatures(
   return [minx, miny, maxx, maxy];
 }
 
-function LayerPreview({ layer, color }: { layer: string; color?: string }) {
+function LayerPreview({
+  layer,
+  color,
+  raster,
+}: {
+  layer: string;
+  color?: string;
+  raster?: boolean;
+}) {
+  if (raster) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          width: "20px",
+          height: "14px",
+          background: "linear-gradient(135deg, #1a1712 0%, #1f7a3e 55%, #8fbf00 100%)",
+          border: "1px solid var(--ink-900)",
+          borderRadius: "2px",
+          display: "block",
+        }}
+      />
+    );
+  }
   if (color) {
     return (
       <span
@@ -125,21 +188,6 @@ function LayerPreview({ layer, color }: { layer: string; color?: string }) {
       <span
         aria-hidden="true"
         style={{ width: "20px", height: "3px", background: "var(--layer-conflict)", display: "block" }}
-      />
-    );
-  }
-  if (layer === "satellite") {
-    return (
-      <span
-        aria-hidden="true"
-        style={{
-          width: "20px",
-          height: "14px",
-          background: "linear-gradient(135deg, #1a1712 0%, #1f7a3e 55%, #8fbf00 100%)",
-          border: "1px solid var(--ink-900)",
-          borderRadius: "2px",
-          display: "block",
-        }}
       />
     );
   }
@@ -195,13 +243,18 @@ export default function MapPage() {
           try {
             const features = await fetchSourceFeatures(id);
             if (features.features.length === 0) return null;
-            const kind = features.source?.kind ?? "";
+            const item = sources?.items.find((entry) => entry.source_id === id);
+            const kind = item?.kind ?? features.source?.kind ?? "";
+            const synthetic = item?.is_synthetic ?? false;
+            const { role, hex } = mapRole(synthetic, kind);
             const total = features.total;
             const drawn = features.features.length;
             return {
               id,
               label: features.source?.name ?? "Registry layer",
-              color: kindHex(kind),
+              color: hex,
+              role,
+              synthetic,
               meta: `${kindLabel(kind)} · ${total} feature(s)${
                 features.truncated ? ` (first ${drawn} drawn)` : ""
               }`,
@@ -225,7 +278,12 @@ export default function MapPage() {
     [sources],
   );
 
-  type PreviewLayer = ImageLayer & { meta: string; color: string };
+  type PreviewLayer = ImageLayer & {
+    meta: string;
+    color: string;
+    role: MapRole;
+    synthetic: boolean;
+  };
 
   const { data: imageLayers } = useQuery<PreviewLayer[]>({
     queryKey: ["map-image-layers", rasterIds.join(",")],
@@ -235,15 +293,19 @@ export default function MapPage() {
         rasterIds.map(async (id) => {
           try {
             const info = await fetchSourcePreview(id);
-            const kind =
-              sources?.items.find((item) => item.source_id === id)?.kind ?? "drone_ori";
+            const item = sources?.items.find((entry) => entry.source_id === id);
+            const kind = item?.kind ?? "drone_ori";
+            const synthetic = item?.is_synthetic ?? false;
+            const { role, hex } = mapRole(synthetic, kind);
             return {
               id,
               label: info.name,
               url: previewPngUrl(id),
               bounds: info.bounds,
               meta: `${kindLabel(kind)} · raster preview · ${info.width}×${info.height} px`,
-              color: kindHex(kind),
+              color: hex,
+              role,
+              synthetic,
             } satisfies PreviewLayer;
           } catch {
             return null;
@@ -262,15 +324,32 @@ export default function MapPage() {
       label: layer.label,
       meta: layer.meta,
       group: "Registry" as const,
+      role: layer.role,
+      defaultOn: !layer.synthetic,
     }));
     const imageRows: LayerRow[] = (imageLayers ?? []).map((layer) => ({
       key: layer.id,
       label: layer.label,
       meta: layer.meta,
       group: "Registry" as const,
+      role: layer.role,
+      raster: true,
+      defaultOn: !layer.synthetic,
     }));
     return [...LAYERS, ...registryRows, ...imageRows];
   }, [registryLayers, imageLayers]);
+
+  /** Explicit on/off wins; otherwise a layer falls back to its default
+   * (synthetic demo layers start hidden so the first view is real data). */
+  const resolvedVisible = useMemo(() => {
+    const resolved: Record<string, boolean> = {};
+    for (const layer of rows) resolved[layer.key] = visible[layer.key] ?? layer.defaultOn;
+    return resolved;
+  }, [rows, visible]);
+
+  const colorOf = (key: string): string | undefined =>
+    (registryLayers ?? []).find((layer) => layer.id === key)?.color ??
+    (imageLayers ?? []).find((layer) => layer.id === key)?.color;
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -281,8 +360,10 @@ export default function MapPage() {
     );
   }, [rows, query]);
 
-  const shownCount =
-    rows.filter((layer) => visible[layer.key] ?? true).length;
+  const shownCount = rows.filter((layer) => resolvedVisible[layer.key]).length;
+  const hiddenSynthetic = rows.filter(
+    (layer) => layer.role === "synthetic" && !resolvedVisible[layer.key],
+  ).length;
 
   const fitBounds = useMemo(() => {
     const boxes: ([number, number, number, number] | null)[] = [
@@ -417,15 +498,15 @@ export default function MapPage() {
                         gap: "8px",
                         padding: "8px 6px",
                         borderRadius: "var(--radius-control)",
-                        background: visible[layer.key] ?? true ? "var(--paper-200)" : "transparent",
+                        background: resolvedVisible[layer.key] ? "var(--paper-200)" : "transparent",
                       }}
                     >
                       <button
                         type="button"
                         onClick={() => toggle(layer.key)}
-                        aria-pressed={visible[layer.key] ?? true}
-                        aria-label={`${(visible[layer.key] ?? true) ? "Hide" : "Show"} ${layer.label}`}
-                        title={(visible[layer.key] ?? true) ? "Hide layer" : "Show layer"}
+                        aria-pressed={resolvedVisible[layer.key]}
+                        aria-label={`${resolvedVisible[layer.key] ? "Hide" : "Show"} ${layer.label}`}
+                        title={resolvedVisible[layer.key] ? "Hide layer" : "Show layer"}
                         style={{
                           display: "grid",
                           placeItems: "center",
@@ -438,7 +519,7 @@ export default function MapPage() {
                           color: "var(--text)",
                         }}
                       >
-                        {(visible[layer.key] ?? true) ? <Eye size={14} /> : <EyeOff size={14} />}
+                        {resolvedVisible[layer.key] ? <Eye size={14} /> : <EyeOff size={14} />}
                       </button>
                       <span style={{ minWidth: 0 }}>
                         <span
@@ -448,15 +529,13 @@ export default function MapPage() {
                             alignItems: "center",
                             gap: "8px",
                             fontWeight: 500,
-                            opacity: (visible[layer.key] ?? true) ? 1 : 0.55,
+                            opacity: resolvedVisible[layer.key] ? 1 : 0.55,
                           }}
                         >
                           <LayerPreview
                             layer={layer.key}
-                            color={
-                              (registryLayers ?? []).find((l) => l.id === layer.key)?.color ??
-                              (imageLayers ?? []).find((l) => l.id === layer.key)?.color
-                            }
+                            raster={layer.raster}
+                            color={colorOf(layer.key)}
                           />
                           {layer.label}
                         </span>
@@ -481,36 +560,58 @@ export default function MapPage() {
           <div className="divider" style={{ margin: "4px 0 12px" }} />
 
           <h2 className="label" style={{ margin: "0 0 8px", color: "var(--text-muted)" }}>
-            Legend
+            Legend — what each colour means
           </h2>
-          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "6px" }}>
-            <li className="small" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span
-                aria-hidden="true"
-                style={{ width: "18px", height: "3px", background: "var(--layer-municipal)" }}
-              />
-              Road centreline (municipal)
-            </li>
-            <li className="small" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span
-                aria-hidden="true"
-                style={{ width: "18px", height: "3px", background: "var(--layer-conflict)" }}
-              />
-              Administrative boundary (municipal)
-            </li>
-            <li className="small" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span
-                aria-hidden="true"
-                style={{ width: "18px", height: "3px", background: "var(--layer-canonical)" }}
-              />
-              Your registered vector layers
-            </li>
-          </ul>
+          <div style={{ display: "grid", gap: "12px" }}>
+            {LEGEND_GROUPS.map(({ role, title, note }) => {
+              const entries = rows.filter(
+                (layer) => layer.role === role && resolvedVisible[layer.key],
+              );
+              if (entries.length === 0) return null;
+              return (
+                <section key={role}>
+                  <p className="small" style={{ margin: "0 0 2px", fontWeight: 600 }}>
+                    {title}
+                  </p>
+                  <p
+                    className="small"
+                    style={{ margin: "0 0 6px", color: "var(--text-muted)" }}
+                  >
+                    {note}
+                  </p>
+                  <ul
+                    style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: "4px" }}
+                  >
+                    {entries.map((layer) => (
+                      <li
+                        key={layer.key}
+                        className="small"
+                        style={{ display: "flex", alignItems: "center", gap: "8px" }}
+                      >
+                        <LayerPreview
+                          layer={layer.key}
+                          raster={layer.raster}
+                          color={colorOf(layer.key)}
+                        />
+                        {layer.label}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+            {hiddenSynthetic > 0 && (
+              <p className="small" style={{ margin: 0, color: "var(--text-muted)" }}>
+                {hiddenSynthetic} synthetic layer{hiddenSynthetic > 1 ? "s" : ""} hidden — use the
+                eye icons above to show demo data.
+              </p>
+            )}
+          </div>
         </aside>
 
         <section className="panel wb-map" aria-label="Map of Sector 22, Chandigarh">
         <MapCanvas
-          visible={visible}
+          visible={resolvedVisible}
           fitKey={fitKey}
           dynamicLayers={registryLayers ?? []}
           imageLayers={imageLayers ?? []}

@@ -80,11 +80,15 @@ function addDynamicLayer(
   if (map.getSource(sourceId)) return;
   const shown = (visible[layer.id] ?? true) ? "visible" : "none";
   map.addSource(sourceId, { type: "geojson", data: layer.data });
+  // The cream casing is a legibility halo for LINE features only. Polygon
+  // outlines skip it: on small polygons the halo swallowed the fill and tiny
+  // features read as white discs on the map.
   map.addLayer({
     id: `${sourceId}-line-casing`,
     type: "line",
     source: sourceId,
     layout: { visibility: shown },
+    filter: ["==", ["geometry-type"], "LineString"],
     paint: { "line-color": "#fffdf7", "line-width": 3.5, "line-opacity": 0.9 },
   });
   map.addLayer({
@@ -99,7 +103,7 @@ function addDynamicLayer(
     type: "fill",
     source: sourceId,
     layout: { visibility: shown },
-    paint: { "fill-color": layer.color, "fill-opacity": 0.2, "fill-outline-color": layer.color },
+    paint: { "fill-color": layer.color, "fill-opacity": 0.14, "fill-outline-color": layer.color },
   });
   map.addLayer({
     id: `${sourceId}-circle`,

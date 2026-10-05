@@ -1,0 +1,26 @@
+name: keep-alive
+
+on:
+  schedule:
+    - cron: "*/14 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake MinIO object store (free tier sleeps after 15 min idle)
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 120 \
+            --retry 3 --retry-delay 15 \
+            "https://samanvay-minio-pa1p.onrender.com/minio/health/live" || true)
+          echo "minio health/live -> $code"
+          [ "$code" = "200" ]
+
+      - name: Wake API readyz (warms Postgres, Redis, MinIO and policy checks)
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 120 \
+            --retry 3 --retry-delay 15 \
+            "https://samanvay-api-wjkk.onrender.com/readyz" || true)
+          echo "api readyz -> $code"
+          [ "$code" = "200" ]
